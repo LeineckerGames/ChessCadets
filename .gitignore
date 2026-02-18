@@ -1,0 +1,17 @@
+# --- Python Specific ---
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# --- Unreal Web/Cache (The AWS Secret fix) ---
+webcache/
+webcache_*/
+Saved/
+Intermediate/
+DerivedDataCache/
