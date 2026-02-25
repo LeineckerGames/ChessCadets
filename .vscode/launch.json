@@ -8,8 +8,8 @@
       "args": [],
       "stopAtEntry": false,
       "externalConsole": true,
-      "cwd": "c:/Workspace/Chess4K/ChessCadets/Chess3DK/Source/model",
-      "program": "c:/Workspace/Chess4K/ChessCadets/Chess3DK/Source/model/build/Debug/outDebug",
+      "cwd": "c:/Workspace/Chess4K/ChessCadets/Chess3DK/Source",
+      "program": "c:/Workspace/Chess4K/ChessCadets/Chess3DK/Source/build/Debug/outDebug",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb",
       "setupCommands": [
