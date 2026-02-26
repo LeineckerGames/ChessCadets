@@ -1,0 +1,4 @@
+{
+  "enableCMake": true,
+  "sourceDirectory": "chess3dk\\source"
+}

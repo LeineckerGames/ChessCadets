@@ -1,0 +1,12 @@
+{
+  "version": "0.2.1",
+  "defaults": {},
+  "configurations": [
+    {
+      "type": "default",
+      "project": "Chess3DK\\Source\\CMakeLists.txt",
+      "projectTarget": "pulse-cpp--.exe",
+      "name": "pulse-cpp--.exe"
+    }
+  ]
+}
