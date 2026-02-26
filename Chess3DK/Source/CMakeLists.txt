@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
 project(main)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 add_library(core STATIC
         bitboard.cpp
         model/castling.cpp
@@ -25,6 +28,7 @@ add_library(core STATIC
 add_executable(pulse main.cpp)
 set_target_properties(pulse PROPERTIES OUTPUT_NAME "pulse-cpp-${PLATFORM_SUFFIX}-${pulse_VERSION}")
 
+find_package(Threads REQUIRED)
 target_link_libraries(pulse core Threads::Threads)
 
 install(TARGETS pulse DESTINATION .)
