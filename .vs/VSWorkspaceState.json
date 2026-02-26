@@ -1,6 +1,9 @@
 {
   "ExpandedNodes": [
-    ""
+    "",
+    "\\Chess3DK",
+    "\\Chess3DK\\Source"
   ],
+  "SelectedNode": "\\Chess3DK\\Source\\CMakeLists.txt",
   "PreviewInSolutionExplorer": false
 }
