@@ -1,0 +1,7 @@
+C:/Workspace/Chess4K/ChessCadets/Chess3DK/Source/out/build/x64-Debug/CMakeFiles/core.dir
+C:/Workspace/Chess4K/ChessCadets/Chess3DK/Source/out/build/x64-Debug/CMakeFiles/pulse.dir
+C:/Workspace/Chess4K/ChessCadets/Chess3DK/Source/out/build/x64-Debug/CMakeFiles/edit_cache.dir
+C:/Workspace/Chess4K/ChessCadets/Chess3DK/Source/out/build/x64-Debug/CMakeFiles/rebuild_cache.dir
+C:/Workspace/Chess4K/ChessCadets/Chess3DK/Source/out/build/x64-Debug/CMakeFiles/list_install_components.dir
+C:/Workspace/Chess4K/ChessCadets/Chess3DK/Source/out/build/x64-Debug/CMakeFiles/install.dir
+C:/Workspace/Chess4K/ChessCadets/Chess3DK/Source/out/build/x64-Debug/CMakeFiles/install/local.dir
