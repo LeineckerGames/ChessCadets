@@ -19,3 +19,28 @@ webcache_*/
 Saved/
 Intermediate/
 DerivedDataCache/
+
+# --- Unreal Engine Build Files ---
+Binaries/
+Build/
+*.sln
+*.suo
+*.sdf
+*.opensdf
+*.db
+*.opendb
+
+# --- Visual Studio Files ---
+.vs/
+.vscode/
+
+# --- Rider Files ---
+.idea/
+
+# --- OS Files ---
+.DS_Store
+Thumbs.db
+
+# --- Unreal Engine Logs ---
+*.log
+*.tmp
