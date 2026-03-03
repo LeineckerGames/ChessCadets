@@ -1,8 +1,20 @@
-# --- Visual Studio ---
 .vs/
-build/
+.vscode/
+.vsconfig
+*.sln
+*.suo
+*.sdf
+*.opensdf
+*.db
+*.opendb
+*.VC.db
+*.VC.opendb
+*.pdb
+Plugins/VisualStudioTools/
 
-# --- Python Specific ---
+.idea/
+
+# --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
@@ -13,34 +25,19 @@ env/
 pip-log.txt
 pip-delete-this-directory.txt
 
-# --- Unreal Web/Cache (The AWS Secret fix) ---
-webcache/
-webcache_*/
+# --- Unreal Engine ---
 Saved/
 Intermediate/
 DerivedDataCache/
-
-# --- Unreal Engine Build Files ---
 Binaries/
 Build/
-*.sln
-*.suo
-*.sdf
-*.opensdf
-*.db
-*.opendb
+PackagingResults/
+Content/GeneratedTextures/
 
-# --- Visual Studio Files ---
-.vs/
-.vscode/
-
-# --- Rider Files ---
-.idea/
-
-# --- OS Files ---
+# --- OS ---
 .DS_Store
 Thumbs.db
 
-# --- Unreal Engine Logs ---
+# --- Misc ---
 *.log
 *.tmp
