@@ -1,0 +1,22 @@
+# ninja log v6
+43	892	7937643784190783	CMakeFiles/core.dir/model/file.cpp.obj	33ad416c0cecb0ff
+14	912	7937643784034543	CMakeFiles/core.dir/model/castling.cpp.obj	119ed7227df249e8
+8	930	7937643783878290	CMakeFiles/core.dir/bitboard.cpp.obj	f5abc64f861a1469
+21	1146	7937643784034543	CMakeFiles/core.dir/model/color.cpp.obj	72a5a99ec8d735c6
+53	1196	7937643784347049	CMakeFiles/core.dir/model/move.cpp.obj	1281c42e76e4a86c
+70	1332	7937643784503313	CMakeFiles/core.dir/movelist.cpp.obj	54ef5c4748c0cdcf
+897	1766	7937643792891381	CMakeFiles/core.dir/model/piece.cpp.obj	9785d99bcabef7c4
+913	1794	7937643793033192	CMakeFiles/core.dir/model/piecetype.cpp.obj	c1476d11153ec0e0
+28	1839	7937643784034543	CMakeFiles/core.dir/evaluation.cpp.obj	f31313b83c22bbf
+63	2032	7937643784503313	CMakeFiles/core.dir/movegenerator.cpp.obj	544e157e4e8de68e
+35	2054	7937643784190783	CMakeFiles/core.dir/notation.cpp.obj	81f572b333376ca5
+1795	2139	7937643801810568	CMakeFiles/core.dir/model/value.cpp.obj	c34d218e1ff2509d
+1197	2146	7937643795796409	CMakeFiles/core.dir/model/rank.cpp.obj	1b3101019dbafcfe
+79	2166	7937643784659556	CMakeFiles/core.dir/perft.cpp.obj	fd4ffac73b41e043
+1766	2434	7937643801498093	CMakeFiles/core.dir/model/square.cpp.obj	d4c5305c2b092be5
+931	2537	7937643793227594	CMakeFiles/core.dir/position.cpp.obj	75e032446b718b83
+1147	2887	7937643795277730	CMakeFiles/core.dir/pulse.cpp.obj	bd04710b4cef5f60
+1332	2968	7937643797123087	CMakeFiles/core.dir/search.cpp.obj	27379623132c4897
+2969	3131	7937643813529300	core.lib	8602edf507645d88
+1840	3141	7937643802279340	CMakeFiles/pulse.dir/main.cpp.obj	4a22f3fe53bdd58f
+3142	3609	7937643815248047	pulse-cpp--.exe	8b31dcfee00bd185
