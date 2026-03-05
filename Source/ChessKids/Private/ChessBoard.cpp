@@ -2,11 +2,12 @@
 
 #include "ChessBoard.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
 AChessBoard::AChessBoard()
 {
-	PrimaryActorTick.bCanEverTick = true; // needed for neon pulse
+	PrimaryActorTick.bCanEverTick = true;
 
 	USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(Root);
@@ -16,7 +17,7 @@ void AChessBoard::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 	BuildBoard();
-	BuildCyberpunkFrame();
+	BuildHolographicFrame();
 	RebuildNeonDMIs();
 	SnapModelToBoard();
 }
@@ -24,25 +25,33 @@ void AChessBoard::OnConstruction(const FTransform& Transform)
 void AChessBoard::BeginPlay()
 {
 	Super::BeginPlay();
-	SnapModelToBoard(); 
+	SnapModelToBoard(); // re-snap at runtime in case the actor was moved after OnConstruction
 }
 
 void AChessBoard::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (NeonPulseSpeed <= 0.f || NeonDynMaterials.IsEmpty()) return;
+	// neon pulse
+	if (NeonPulseSpeed > 0.f && !NeonDynMaterials.IsEmpty())
+	{
+		NeonPulseTime += DeltaTime * NeonPulseSpeed;
+		const float T   = FMath::Sin(NeonPulseTime * PI * 2.f) * 0.5f + 0.5f;
+		const float Val = FMath::Lerp(NeonPulseMin, NeonPulseMax, T);
+		for (UMaterialInstanceDynamic* DMI : NeonDynMaterials)
+			if (IsValid(DMI))
+				DMI->SetScalarParameterValue(NeonPulseParamName, Val);
+	}
 
-	NeonPulseTime += DeltaTime * NeonPulseSpeed;
-
-	const float T   = FMath::Sin(NeonPulseTime * PI * 2.f) * 0.5f + 0.5f;
-	const float Val = FMath::Lerp(NeonPulseMin, NeonPulseMax, T);
-
-	for (UMaterialInstanceDynamic* DMI : NeonDynMaterials)
-		if (IsValid(DMI))
-			DMI->SetScalarParameterValue(NeonPulseParamName, Val);
+	// holographic scan plane sweeps upward and loops back to the bottom
+	if (IsValid(ScanPlaneMesh) && ScanSpeed > 0.f)
+	{
+		ScanOffset = FMath::Fmod(ScanOffset + DeltaTime * ScanSpeed, ScanHeight);
+		ScanPlaneMesh->SetRelativeLocation(FVector(0.f, 0.f, 1.f + ScanOffset));
+	}
 }
 
+// one helper so we don't copy-paste attach+register+mesh+mat for every piece
 
 UStaticMeshComponent* AChessBoard::MakeMeshComp(
 	AActor* Owner, const FName& Name, UStaticMesh* Mesh,
@@ -64,7 +73,7 @@ UStaticMeshComponent* AChessBoard::MakeMeshComp(
 
 void AChessBoard::BuildBoard()
 {
-	for (UStaticMeshComponent* M : SquareMeshes)   if (IsValid(M)) M->DestroyComponent();
+	for (UStaticMeshComponent* M : SquareMeshes)    if (IsValid(M)) M->DestroyComponent();
 	for (UStaticMeshComponent* M : HighlightMeshes) if (IsValid(M)) M->DestroyComponent();
 	SquareMeshes.Empty();
 	HighlightMeshes.Empty();
@@ -74,7 +83,7 @@ void AChessBoard::BuildBoard()
 	if (!PlaneMesh) return;
 
 	const float Scale     = SquareSize / 100.f;
-	const float HalfBoard = 3.5f * SquareSize; 
+	const float HalfBoard = 3.5f * SquareSize;
 
 	for (int32 Rank = 0; Rank < 8; ++Rank)
 	{
@@ -91,6 +100,7 @@ void AChessBoard::BuildBoard()
 				bLight ? LightSquareMaterial : DarkSquareMaterial);
 			SquareMeshes.Add(Sq);
 
+			// offset 0.5 cm up to avoid z-fighting; hidden until a piece is selected
 			UStaticMeshComponent* Hl = MakeMeshComp(
 				this, *FString::Printf(TEXT("Hl_%d_%d"), File, Rank),
 				PlaneMesh, GetRootComponent(), LocalPos + FVector(0.f, 0.f, 0.5f),
@@ -101,79 +111,60 @@ void AChessBoard::BuildBoard()
 	}
 }
 
+//Holographic frame
 
-void AChessBoard::BuildCyberpunkFrame()
+void AChessBoard::BuildHolographicFrame()
 {
-	// wipe anything left from a previous OnConstruction before rebuilding
-	for (UStaticMeshComponent* M : BorderWalls)   if (IsValid(M)) M->DestroyComponent();
-	for (UStaticMeshComponent* M : CornerAccents) if (IsValid(M)) M->DestroyComponent();
+	// wipe anything from a previous OnConstruction
+	for (UPointLightComponent* L : EdgeLights) if (IsValid(L)) L->DestroyComponent();
+	EdgeLights.Empty();
 	if (IsValid(GridOverlayMesh)) { GridOverlayMesh->DestroyComponent(); GridOverlayMesh = nullptr; }
-	BorderWalls.Empty();
-	CornerAccents.Empty();
+	if (IsValid(ScanPlaneMesh))   { ScanPlaneMesh->DestroyComponent();   ScanPlaneMesh   = nullptr; }
+	ScanOffset = 0.f;
 
-	UStaticMesh* CubeMesh  = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
 	UStaticMesh* PlaneMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Plane.Plane"));
-	if (!CubeMesh || !PlaneMesh) return;
+	if (!PlaneMesh) return;
 
-	const float HalfBoard = 3.5f * SquareSize;      
-	const float FullBoard = 8.f  * SquareSize;       
-	const float BT        = BorderThickness;
-	const float BH        = BorderHeight;
-
-	// engine cubes are 100x100x100 by default so divide to get actual
-	const float WallCenterZ = BH * 0.5f;             
-	const float WallYPos    = HalfBoard + BT * 0.5f; // distance from board origin to wall centre
-
-	const float LongScale = (FullBoard + 2.f * BT) / 100.f;
-	const float ThickScale = BT / 100.f;
-	const float HeightScale = BH / 100.f;
-
-	BorderWalls.Add(MakeMeshComp(this, TEXT("Wall_PY"), CubeMesh, GetRootComponent(),
-		FVector(0.f,  WallYPos, WallCenterZ),
-		FVector(LongScale, ThickScale, HeightScale), BorderMaterial));
-
-	BorderWalls.Add(MakeMeshComp(this, TEXT("Wall_NY"), CubeMesh, GetRootComponent(),
-		FVector(0.f, -WallYPos, WallCenterZ),
-		FVector(LongScale, ThickScale, HeightScale), BorderMaterial));
-
-	const float InnerScale = FullBoard / 100.f;
-	const float WallXPos   = HalfBoard + BT * 0.5f;
-
-	BorderWalls.Add(MakeMeshComp(this, TEXT("Wall_PX"), CubeMesh, GetRootComponent(),
-		FVector( WallXPos, 0.f, WallCenterZ),
-		FVector(ThickScale, InnerScale, HeightScale), BorderMaterial));
-
-	BorderWalls.Add(MakeMeshComp(this, TEXT("Wall_NX"), CubeMesh, GetRootComponent(),
-		FVector(-WallXPos, 0.f, WallCenterZ),
-		FVector(ThickScale, InnerScale, HeightScale), BorderMaterial));
-
-	const float CA       = CornerAccentSize;
-	const float CAScale  = CA / 100.f;
-	const float CornerXY = HalfBoard + BT * 0.5f;    
-	const float CornerZ  = BH + CA * 0.5f;           
-
-	CornerAccents.Add(MakeMeshComp(this, TEXT("Corner_PP"), CubeMesh, GetRootComponent(),
-		FVector( CornerXY,  CornerXY, CornerZ), FVector(CAScale, CAScale, CAScale), CornerAccentMaterial));
-	CornerAccents.Add(MakeMeshComp(this, TEXT("Corner_PN"), CubeMesh, GetRootComponent(),
-		FVector( CornerXY, -CornerXY, CornerZ), FVector(CAScale, CAScale, CAScale), CornerAccentMaterial));
-	CornerAccents.Add(MakeMeshComp(this, TEXT("Corner_NP"), CubeMesh, GetRootComponent(),
-		FVector(-CornerXY,  CornerXY, CornerZ), FVector(CAScale, CAScale, CAScale), CornerAccentMaterial));
-	CornerAccents.Add(MakeMeshComp(this, TEXT("Corner_NN"), CubeMesh, GetRootComponent(),
-		FVector(-CornerXY, -CornerXY, CornerZ), FVector(CAScale, CAScale, CAScale), CornerAccentMaterial));
-
+	const float FullBoard = 8.f * SquareSize;
 	const float GridScale = FullBoard / 100.f;
+	const float BoardEdge = 4.f * SquareSize; // outer edge of the board
+
+	// neon grid overlay over the whole 8x8 surface
 	GridOverlayMesh = MakeMeshComp(this, TEXT("GridOverlay"), PlaneMesh, GetRootComponent(),
-		FVector(0.f, 0.f, 1.f),
-		FVector(GridScale, GridScale, 1.f), GridOverlayMaterial);
+		FVector(0.f, 0.f, 1.f), FVector(GridScale, GridScale, 1.f), GridOverlayMaterial);
+
+	// thin scan plane — Tick moves it upward through ScanHeight then loops
+	ScanPlaneMesh = MakeMeshComp(this, TEXT("ScanPlane"), PlaneMesh, GetRootComponent(),
+		FVector(0.f, 0.f, 1.f), FVector(GridScale, GridScale, 0.05f), HolographicScanMaterial);
+
+	// one point light per edge, sitting just above the board surface
+	auto AddLight = [&](FName Name, FVector Pos)
+	{
+		UPointLightComponent* L = NewObject<UPointLightComponent>(this, Name);
+		L->SetupAttachment(GetRootComponent());
+		L->RegisterComponent();
+		L->SetRelativeLocation(Pos);
+		L->SetLightColor(EdgeLightColor);
+		L->Intensity = EdgeLightIntensity;
+		L->AttenuationRadius = FullBoard * 0.75f;
+		L->bUseInverseSquaredFalloff = false;
+		EdgeLights.Add(L);
+	};
+
+	AddLight(TEXT("Light_PY"), FVector(0.f,        BoardEdge, 5.f));
+	AddLight(TEXT("Light_NY"), FVector(0.f,       -BoardEdge, 5.f));
+	AddLight(TEXT("Light_PX"), FVector( BoardEdge, 0.f,       5.f));
+	AddLight(TEXT("Light_NX"), FVector(-BoardEdge, 0.f,       5.f));
 }
 
-//Neon pulse dynamic material instances
+//Neon DMIs
 
 void AChessBoard::RebuildNeonDMIs()
 {
 	NeonDynMaterials.Empty();
 	if (NeonPulseSpeed <= 0.f) return;
 
+	// local helper — create DMI, swap it onto the comp, add to tracking list
 	auto MakeDMI = [&](UStaticMeshComponent* Comp, UMaterialInterface* BaseMat)
 	{
 		if (!IsValid(Comp) || !IsValid(BaseMat)) return;
@@ -182,15 +173,16 @@ void AChessBoard::RebuildNeonDMIs()
 		NeonDynMaterials.Add(DMI);
 	};
 
-	for (UStaticMeshComponent* W : BorderWalls)   MakeDMI(W, BorderMaterial);
-	for (UStaticMeshComponent* C : CornerAccents) MakeDMI(C, CornerAccentMaterial);
-	if (IsValid(GridOverlayMesh))                  MakeDMI(GridOverlayMesh, GridOverlayMaterial);
+	if (IsValid(GridOverlayMesh)) MakeDMI(GridOverlayMesh, GridOverlayMaterial);
+	if (IsValid(ScanPlaneMesh))   MakeDMI(ScanPlaneMesh,   HolographicScanMaterial);
 }
 
 void AChessBoard::SnapModelToBoard()
 {
 	if (!IsValid(SnappedModel)) return;
 
+	// SnapOffset is in board-local space so a positive Z still means "above the board"
+	// regardless of how the board itself is rotated in the world.
 	const FVector WorldPos = GetActorTransform().TransformPosition(SnapOffset);
 	SnappedModel->SetActorLocation(WorldPos);
 
@@ -227,6 +219,17 @@ FVector AChessBoard::SquareToWorldLocation(const FString& SquareStr) const
 	return FileRankToWorldLocation(File, Rank);
 }
 
+bool AChessBoard::WorldLocationToSquare(FVector WorldLoc, FString& OutSquare) const
+{
+	// transform into board-local space first so rotation doesn't break the math
+	const FVector Local = GetActorTransform().InverseTransformPosition(WorldLoc);
+	const int32 File = FMath::FloorToInt((Local.X + 4.f * SquareSize) / SquareSize);
+	const int32 Rank = FMath::FloorToInt((Local.Y + 4.f * SquareSize) / SquareSize);
+	if (File < 0 || File > 7 || Rank < 0 || Rank > 7) return false;
+	OutSquare = FileRankToSquareName(File, Rank);
+	return true;
+}
+
 bool AChessBoard::SquareToFileRank(const FString& SquareStr, int32& OutFile, int32& OutRank) const
 {
 	return ParseSquare(SquareStr, OutFile, OutRank);
@@ -243,7 +246,7 @@ FVector AChessBoard::GetBoardCenter() const
 	return GetActorLocation();
 }
 
-//highlighting
+//Highlighting
 
 UStaticMeshComponent* AChessBoard::GetHighlightMesh(int32 File, int32 Rank) const
 {
