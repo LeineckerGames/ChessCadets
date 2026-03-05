@@ -5,6 +5,8 @@
 #include "ChessPlayerController.generated.h"
 
 class AChessBoard;
+class AChessManager;
+class AChessPiece;
 
 UCLASS()
 class CHESSKIDS_API AChessPlayerController : public APlayerController
@@ -19,9 +21,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess")
 	AChessBoard* Board = nullptr;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Chess")
-	AActor* SelectedActor = nullptr; // last actor clicked
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess")
+	AChessManager* Manager = nullptr;
 
 private:
 	void OnSelect();
+
+	FString SelectedSquare;
+	bool bPieceSelected = false;
 };
