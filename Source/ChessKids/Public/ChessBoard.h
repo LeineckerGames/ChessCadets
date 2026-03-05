@@ -91,7 +91,7 @@ public:
 	bool WorldLocationToSquare(FVector WorldLoc, FString& OutSquare) const;
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Chess|Board")
-	FVector FileRankToWorldLocation(int32 File, int32 Rank) const;
+	FVector FileRankToWorldLocation(int32 File, int32 Rank, float Zoffset = 0.f) const;
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Chess|Board")
 	bool SquareToFileRank(const FString& SquareStr, int32& OutFile, int32& OutRank) const;
@@ -109,11 +109,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Chess|Board")
 	void ShowLegalMoveTargets(const TArray<FString>& Squares);
 
-	UFUNCTION(BlueprintCallable, Category = "Chess|Board")
-	void SelectSquareAndShowMoves(const FString& SquareStr, const TArray<FString>& LegalMoves);
+	/*UFUNCTION(BlueprintCallable, Category = "Chess|Board")
+	void SelectSquareAndShowMoves(const FString& SquareStr, const TArray<FString>& LegalMoves);*/
 
 	UFUNCTION(BlueprintCallable, Category = "Chess|Board")
 	void ClearHighlights();
+	
+	UFUNCTION(BlueprintCallable, Category="Chess|Snap")
+	void SnapActorToSquare(AActor* ActorToSnap, int32 File, int32 Rank, float ZOffset = 0.f,bool bSnapRot = false, FRotator Rot = FRotator::ZeroRotator);
 
 private:
 	UPROPERTY() TArray<UStaticMeshComponent*> SquareMeshes;
@@ -129,7 +132,7 @@ private:
 	void BuildBoard();
 	void BuildHolographicFrame();
 	void RebuildNeonDMIs();
-	void SnapModelToBoard();
+	//void SnapModelToBoard();
 
 	UStaticMeshComponent* GetHighlightMesh(int32 File, int32 Rank) const;
 	static bool ParseSquare(const FString& Str, int32& OutFile, int32& OutRank);

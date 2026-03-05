@@ -19,13 +19,13 @@ void AChessBoard::OnConstruction(const FTransform& Transform)
 	BuildBoard();
 	BuildHolographicFrame();
 	RebuildNeonDMIs();
-	SnapModelToBoard();
+	//SnapModelToBoard();
 }
 
 void AChessBoard::BeginPlay()
 {
 	Super::BeginPlay();
-	SnapModelToBoard(); // re-snap at runtime in case the actor was moved after OnConstruction
+	//SnapModelToBoard(); // re-snap at runtime in case the actor was moved after OnConstruction
 }
 
 void AChessBoard::Tick(float DeltaTime)
@@ -177,7 +177,7 @@ void AChessBoard::RebuildNeonDMIs()
 	if (IsValid(ScanPlaneMesh))   MakeDMI(ScanPlaneMesh,   HolographicScanMaterial);
 }
 
-void AChessBoard::SnapModelToBoard()
+/*void AChessBoard::SnapModelToBoard()
 {
 	if (!IsValid(SnappedModel)) return;
 
@@ -188,7 +188,7 @@ void AChessBoard::SnapModelToBoard()
 
 	if (bSnapRotation)
 		SnappedModel->SetActorRotation(GetActorRotation() + SnapRotation);
-}
+}*/
 
 //Coordinate helpers
 
@@ -204,11 +204,19 @@ bool AChessBoard::ParseSquare(const FString& Str, int32& OutFile, int32& OutRank
 	return true;
 }
 
-FVector AChessBoard::FileRankToWorldLocation(int32 File, int32 Rank) const
+FVector AChessBoard::FileRankToWorldLocation(int32 File, int32 Rank, float ZOffset) const
 {
+	if (File < 0 || File > 7 || Rank < 0 || Rank > 7)
+		return FVector::ZeroVector;
+
 	const float HalfBoard = 3.5f * SquareSize;
-	const FVector Local(File * SquareSize - HalfBoard,
-	                    Rank * SquareSize - HalfBoard, 0.f);
+
+	const FVector Local(
+		File * SquareSize - HalfBoard,
+		Rank * SquareSize - HalfBoard,
+		ZOffset
+	);
+
 	return GetActorTransform().TransformPosition(Local);
 }
 
@@ -287,8 +295,19 @@ void AChessBoard::ShowLegalMoveTargets(const TArray<FString>& Squares)
 	}
 }
 
-void AChessBoard::SelectSquareAndShowMoves(const FString& SquareStr, const TArray<FString>& LegalMoves)
+void AChessBoard::SnapActorToSquare(AActor* ActorToSnap, int32 File, int32 Rank, float ZOffset,
+                                   bool bSnapRot, FRotator Rot)
 {
-	SelectSquare(SquareStr);
-	ShowLegalMoveTargets(LegalMoves);
+    if (!ActorToSnap) return;
+
+    const FVector Target = FileRankToWorldLocation(File, Rank, ZOffset);
+    const FVector Before = ActorToSnap->GetActorLocation();
+
+    ActorToSnap->SetActorLocation(Target, false, nullptr, ETeleportType::TeleportPhysics);
+
+    const FVector After = ActorToSnap->GetActorLocation();
+
+    UE_LOG(LogTemp, Warning, TEXT("Snap %s: (%d,%d,%.1f) Before=%s After=%s Target=%s"),
+        *GetNameSafe(ActorToSnap), File, Rank, ZOffset,
+        *Before.ToString(), *After.ToString(), *Target.ToString());
 }

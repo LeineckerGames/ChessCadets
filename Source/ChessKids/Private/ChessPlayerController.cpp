@@ -23,11 +23,12 @@ void AChessPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AChessPlayerController::OnSelect);
 }
 
+                         
 void AChessPlayerController::OnSelect()
 {
 	FHitResult Hit;
-	GetHitResultUnderCursor(ECC_Visibility, false, Hit);
-	if (!Hit.IsValid()) return;
+	if(!GetHitResultUnderCursor(ECC_Visibility, false, Hit))
+		return;
 
 	SelectedActor = Hit.GetActor();
 
@@ -39,3 +40,13 @@ void AChessPlayerController::OnSelect()
 			ChessBoard->SelectSquare(Square);
 	}
 }
+
+
+
+
+
+
+
+
+
+
