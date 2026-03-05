@@ -1,11 +1,8 @@
-// ChessManager.cpp
-
 #include "ChessManager.h"
+#include "ChessBoard.h"
+#include "ChessPiece.h"
 #include "Async/Async.h"
 
-// ---------------------------------------------------------------
-// Pulse engine headers (STL-heavy, kept out of the public header)
-// ---------------------------------------------------------------
 THIRD_PARTY_INCLUDES_START
 #include "position.h"
 #include "search.h"
@@ -23,23 +20,18 @@ THIRD_PARTY_INCLUDES_START
 #include "model/movetype.h"
 THIRD_PARTY_INCLUDES_END
 
-// ---------------------------------------------------------------
-// PImpl — holds all engine state and implements pulse::Protocol
-// ---------------------------------------------------------------
 struct AChessManager::FEngineImpl : public pulse::Protocol
 {
 	pulse::Position Position;
 	pulse::Search   Search;
 
-	// Set by AChessManager so the callback can fire the delegate
-	TFunction<void(int /*bestMove*/)> BestMoveCallback;
+	TFunction<void(int)> BestMoveCallback;
 
 	FEngineImpl()
 		: Position(pulse::notation::toPosition(pulse::notation::STANDARDPOSITION))
 		, Search(*this)
 	{}
 
-	// pulse::Protocol overrides
 	void sendBestMove(int bestMove, int ponderMove) override
 	{
 		if (BestMoveCallback)
@@ -53,11 +45,6 @@ struct AChessManager::FEngineImpl : public pulse::Protocol
 	void sendDebug(const std::string&) override {}
 };
 
-// ---------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------
-
-// "e2" -> engine square index (file 0-7, rank 0-7, square = file + rank*16)
 int AChessManager::SquareFromString(const FString& Str)
 {
 	if (Str.Len() < 2) return -1;
@@ -68,12 +55,11 @@ int AChessManager::SquareFromString(const FString& Str)
 	if (FileChar < 'a' || FileChar > 'h') return -1;
 	if (RankChar < '1' || RankChar > '8') return -1;
 
-	const int File = FileChar - 'a';   // 0-7
-	const int Rank = RankChar - '1';   // 0-7
+	const int File = FileChar - 'a';
+	const int Rank = RankChar - '1';
 	return pulse::square::valueOf(File, Rank);
 }
 
-// Engine square index -> "e2"
 FString AChessManager::SquareToString(int Square)
 {
 	if (!pulse::square::isValid(Square)) return TEXT("??");
@@ -102,10 +88,6 @@ static const TCHAR* PieceToChar(int Piece)
 	}
 }
 
-// ---------------------------------------------------------------
-// AChessManager
-// ---------------------------------------------------------------
-
 AChessManager::AChessManager()
 {
 	PrimaryActorTick.bCanEverTick = false;
@@ -115,6 +97,9 @@ void AChessManager::BeginPlay()
 {
 	Super::BeginPlay();
 	NewGame();
+	SpawnAllPieces();
+
+	OnMoveMade.AddDynamic(this, &AChessManager::HandleMoveMade);
 }
 
 void AChessManager::BeginDestroy()
@@ -138,10 +123,8 @@ void AChessManager::NewGame()
 
 	Engine = new FEngineImpl();
 
-	// Wire up the best-move callback to marshal onto the game thread
 	Engine->BestMoveCallback = [this](int BestMove)
 	{
-		// Search runs on its own thread — dispatch back to game thread
 		AsyncTask(ENamedThreads::GameThread, [this, BestMove]()
 		{
 			if (!IsValid(this)) return;
@@ -162,7 +145,6 @@ bool AChessManager::MakeMove(const FString& MoveStr)
 {
 	if (!Engine) return false;
 
-	// Parse the move string (e.g. "e2e4" or "e7e8q")
 	if (MoveStr.Len() < 4) return false;
 
 	const FString OriginStr   = MoveStr.Mid(0, 2);
@@ -173,7 +155,6 @@ bool AChessManager::MakeMove(const FString& MoveStr)
 	const int TargetSquare = SquareFromString(TargetStr);
 	if (OriginSquare < 0 || TargetSquare < 0) return false;
 
-	// Find a matching legal move
 	pulse::MoveGenerator Gen;
 	auto& LegalMoves = Gen.getLegalMoves(
 		Engine->Position, 1, Engine->Position.isCheck());
@@ -184,7 +165,6 @@ bool AChessManager::MakeMove(const FString& MoveStr)
 		if (pulse::move::getOriginSquare(M) != OriginSquare) continue;
 		if (pulse::move::getTargetSquare(M) != TargetSquare) continue;
 
-		// Check promotion piece if provided
 		if (!PromoStr.IsEmpty())
 		{
 			const char PromoChar = (char)FChar::ToLower(PromoStr[0]);
@@ -199,7 +179,6 @@ bool AChessManager::MakeMove(const FString& MoveStr)
 			if (pulse::move::getPromotion(M) != ExpectedPromo) continue;
 		}
 
-		// Legal — apply it
 		Engine->Position.makeMove(M);
 
 		const FString From = SquareToString(OriginSquare);
@@ -210,7 +189,7 @@ bool AChessManager::MakeMove(const FString& MoveStr)
 		return true;
 	}
 
-	return false; // Illegal move
+	return false;
 }
 
 void AChessManager::RequestAIMove()
@@ -299,10 +278,8 @@ void AChessManager::CheckGameOver()
 
 	if (LegalMoves.size == 0)
 	{
-		// No legal moves — checkmate or stalemate
 		if (Engine->Position.isCheck())
 		{
-			// The side that just moved wins
 			const FString Winner = Engine->Position.activeColor == pulse::color::WHITE
 				? TEXT("black") : TEXT("white");
 			OnGameOver.Broadcast(Winner);
@@ -316,4 +293,125 @@ void AChessManager::CheckGameOver()
 
 	if (Engine->Position.isRepetition() || Engine->Position.hasInsufficientMaterial())
 		OnGameOver.Broadcast(TEXT("draw"));
+}
+
+EChessPieceType AChessManager::CharToPieceType(TCHAR C)
+{
+	switch (FChar::ToLower(C))
+	{
+	case 'p': return EChessPieceType::Pawn;
+	case 'n': return EChessPieceType::Knight;
+	case 'b': return EChessPieceType::Bishop;
+	case 'r': return EChessPieceType::Rook;
+	case 'q': return EChessPieceType::Queen;
+	case 'k': return EChessPieceType::King;
+	default:  return EChessPieceType::Pawn;
+	}
+}
+
+void AChessManager::SpawnAllPieces()
+{
+	for (auto& Pair : PieceActors)
+		if (IsValid(Pair.Value))
+			Pair.Value->Destroy();
+	PieceActors.Empty();
+
+	if (!Board) return;
+
+	for (int32 Rank = 0; Rank < 8; ++Rank)
+	{
+		for (int32 File = 0; File < 8; ++File)
+		{
+			FString SquareName = FString::Printf(TEXT("%c%c"), 'a' + File, '1' + Rank);
+			FString PieceStr = GetPieceOnSquare(SquareName);
+			if (PieceStr.IsEmpty()) continue;
+
+			TCHAR PieceChar = PieceStr[0];
+			EChessColor Color = FChar::IsUpper(PieceChar) ? EChessColor::White : EChessColor::Black;
+			EChessPieceType Type = CharToPieceType(PieceChar);
+
+			FVector SpawnLoc = Board->FileRankToWorldLocation(File, Rank, 0.f);
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+			AChessPiece* Piece = GetWorld()->SpawnActor<AChessPiece>(SpawnLoc, FRotator::ZeroRotator, Params);
+			if (Piece)
+			{
+				Piece->Init(Type, Color, File, Rank);
+				Board->SnapActorToSquare(Piece, File, Rank, 0.f);
+				PieceActors.Add(SquareName, Piece);
+			}
+		}
+	}
+}
+
+AChessPiece* AChessManager::FindPieceOnSquare(const FString& Square) const
+{
+	const auto* Found = PieceActors.Find(Square);
+	return Found ? *Found : nullptr;
+}
+
+void AChessManager::HandleMoveMade(FString From, FString To)
+{
+	if (!Board) return;
+
+	AChessPiece* Captured = FindPieceOnSquare(To);
+	if (Captured)
+	{
+		Captured->Destroy();
+		PieceActors.Remove(To);
+	}
+
+	AChessPiece* MovingPiece = FindPieceOnSquare(From);
+	if (MovingPiece)
+	{
+		PieceActors.Remove(From);
+
+		int32 File = To[0] - 'a';
+		int32 Rank = To[1] - '1';
+		Board->SnapActorToSquare(MovingPiece, File, Rank, 0.f);
+		MovingPiece->BoardFile = File;
+		MovingPiece->BoardRank = Rank;
+
+		PieceActors.Add(To, MovingPiece);
+	}
+
+	if (MovingPiece && MovingPiece->PieceType == EChessPieceType::King)
+	{
+		int32 FromFile = From[0] - 'a';
+		int32 ToFile = To[0] - 'a';
+		int32 RankNum = To[1] - '1';
+
+		if (FMath::Abs(ToFile - FromFile) == 2)
+		{
+			if (ToFile > FromFile)
+			{
+				FString RookFrom = FString::Printf(TEXT("h%c"), '1' + RankNum);
+				FString RookTo   = FString::Printf(TEXT("f%c"), '1' + RankNum);
+				AChessPiece* Rook = FindPieceOnSquare(RookFrom);
+				if (Rook)
+				{
+					PieceActors.Remove(RookFrom);
+					Board->SnapActorToSquare(Rook, 5, RankNum, 0.f);
+					Rook->BoardFile = 5;
+					Rook->BoardRank = RankNum;
+					PieceActors.Add(RookTo, Rook);
+				}
+			}
+			else
+			{
+				FString RookFrom = FString::Printf(TEXT("a%c"), '1' + RankNum);
+				FString RookTo   = FString::Printf(TEXT("d%c"), '1' + RankNum);
+				AChessPiece* Rook = FindPieceOnSquare(RookFrom);
+				if (Rook)
+				{
+					PieceActors.Remove(RookFrom);
+					Board->SnapActorToSquare(Rook, 3, RankNum, 0.f);
+					Rook->BoardFile = 3;
+					Rook->BoardRank = RankNum;
+					PieceActors.Add(RookTo, Rook);
+				}
+			}
+		}
+	}
 }
