@@ -1,350 +1,214 @@
 // Copyright 2013-2023 Phokham Nonava
-//
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
 #include "pulse.h"
-
-#include <iostream>
-#include <sstream>
-#include <locale>
+#include <cctype>
+#include <string>
 
 namespace pulse {
 
-void Pulse::run() {
-	std::cin.exceptions(std::iostream::eofbit | std::iostream::failbit | std::iostream::badbit);
-	while (true) {
-		std::string line;
-		std::getline(std::cin, line);
-		std::istringstream input(line);
+    // Helper to split a string by spaces
+    static std::vector<std::string> splitTokens(const std::string& s) {
+        std::vector<std::string> tokens;
+        std::string remaining = s;
+        size_t pos;
+        while ((pos = remaining.find(' ')) != std::string::npos) {
+            std::string token = remaining.substr(0, pos);
+            if (!token.empty()) tokens.push_back(token);
+            remaining = remaining.substr(pos + 1);
+        }
+        if (!remaining.empty()) tokens.push_back(remaining);
+        return tokens;
+    }
 
-		std::string token;
-		input >> std::skipws >> token;
-		if (token == "uci") {
-			receiveInitialize();
-		} else if (token == "debug") {
-			receiveDebug(input);
-		} else if (token == "isready") {
-			receiveReady();
-		} else if (token == "ucinewgame") {
-			receiveNewGame();
-		} else if (token == "position") {
-			receivePosition(input);
-		} else if (token == "go") {
-			receiveGo(input);
-		} else if (token == "stop") {
-			receiveStop();
-		} else if (token == "ponderhit") {
-			receivePonderHit();
-		} else if (token == "quit") {
-			receiveQuit();
-			break;
-		}
-	}
-}
+    void Pulse::run() {
+        // In UE5 commands come directly via receiveCommand()
+    }
 
-void Pulse::receiveQuit() {
-	// We received a quit command. Stop calculating now and
-	// cleanup!
-	search->quit();
-}
+    void Pulse::receiveCommand(const std::string& line) {
+        std::vector<std::string> tokens = splitTokens(line);
+        if (tokens.empty()) return;
 
-void Pulse::receiveInitialize() {
-	search->stop();
+        std::string command = tokens[0];
+        std::string args = line.size() > command.size() + 1 ? line.substr(command.size() + 1) : "";
 
-	// We received an initialization request.
+        if (command == "uci")           receiveInitialize();
+        else if (command == "isready")  receiveReady();
+        else if (command == "ucinewgame") receiveNewGame();
+        else if (command == "debug")    receiveDebug(args);
+        else if (command == "position") receivePosition(args);
+        else if (command == "go")       receiveGo(args);
+        else if (command == "stop")     receiveStop();
+        else if (command == "ponderhit") receivePonderHit();
+        else if (command == "quit")     receiveQuit();
+    }
 
-	// We could do some global initialization here. Probably it would be best
-	// to initialize all tables here as they will exist until the end of the
-	// program.
+    void Pulse::receiveQuit() {
+        search->quit();
+    }
 
-	// We must send an initialization answer back!
-	std::cout << "id name Pulse C++ 2.0.0" << std::endl;
-	std::cout << "id author Phokham Nonava" << std::endl;
-	std::cout << "uciok" << std::endl;
-}
+    void Pulse::receiveInitialize() {
+        search->stop();
+    }
 
-void Pulse::receiveDebug(std::istringstream& input) {
-	std::string token;
-	input >> token;
-	if (token == "on") {
-		debug = true;
-	} else if (token == "off") {
-		debug = false;
-	} else if (token.empty()) {
-		debug = !debug;
-	} else {
-		sendInfo("Unknown token: " + token);
-		return;
-	}
+    void Pulse::receiveDebug(const std::string& args) {
+        if (args == "on") debug = true;
+        else if (args == "off") debug = false;
+        else if (args.empty()) debug = !debug;
+    }
 
-	if (debug) {
-		sendInfo("Turning on debugging mode");
-	} else {
-		sendInfo("Turning off debugging mode");
-	}
-}
+    void Pulse::receiveReady() {
+        // readyok - handled by UE5
+    }
 
-void Pulse::receiveReady() {
-	// We received a ready request. We must send the token back as soon as we
-	// can. However, because we launch the search in a separate thread, our main
-	// thread is able to handle the commands asynchronously to the search. If we
-	// don't answer the ready request in time, our engine will probably be
-	// killed by the GUI.
-	std::cout << "readyok" << std::endl;
-}
+    void Pulse::receiveNewGame() {
+        search->stop();
+        *currentPosition = notation::toPosition(notation::STANDARDPOSITION);
+    }
 
-void Pulse::receiveNewGame() {
-	search->stop();
+    void Pulse::receivePosition(const std::string& args) {
+        search->stop();
 
-	// We received a new game command.
+        std::vector<std::string> tokens = splitTokens(args);
+        if (tokens.empty()) return;
 
-	// Initialize per-game settings here.
-	*currentPosition = notation::toPosition(notation::STANDARDPOSITION);
-}
+        int i = 0;
+        if (tokens[i] == "startpos") {
+            *currentPosition = notation::toPosition(notation::STANDARDPOSITION);
+            i++;
+        }
+        else if (tokens[i] == "fen") {
+            i++;
+            std::string fen;
+            while (i < (int)tokens.size() && tokens[i] != "moves") {
+                fen += tokens[i++] + " ";
+            }
+            *currentPosition = notation::toPosition(fen);
+        }
+        else {
+            throw std::exception();
+        }
 
-void Pulse::receivePosition(std::istringstream& input) {
-	search->stop();
+        // Skip "moves" keyword
+        if (i < (int)tokens.size() && tokens[i] == "moves") i++;
 
-	// We received an position command. Just setup the position.
+        MoveGenerator moveGenerator;
+        while (i < (int)tokens.size()) {
+            std::string moveToken = tokens[i++];
+            MoveList<MoveEntry>& moves = moveGenerator.getLegalMoves(*currentPosition, 1, currentPosition->isCheck());
+            bool found = false;
+            for (int j = 0; j < moves.size; j++) {
+                int move = moves.entries[j]->move;
+                if (fromMove(move) == moveToken) {
+                    currentPosition->makeMove(move);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) throw std::exception();
+        }
+    }
 
-	std::string token;
-	input >> token;
-	if (token == "startpos") {
-		*currentPosition = notation::toPosition(notation::STANDARDPOSITION);
+    void Pulse::receiveGo(const std::string& args) {
+        search->stop();
 
-		if (input >> token) {
-			if (token != "moves") {
-				throw std::exception();
-			}
-		}
-	} else if (token == "fen") {
-		std::string fen;
+        std::vector<std::string> tokens = splitTokens(args);
+        if (tokens.empty()) {
+            search->newInfiniteSearch(*currentPosition);
+            search->start();
+            return;
+        }
 
-		while (input >> token) {
-			if (token == "moves") {
-				break;
-			} else {
-				fen += token + " ";
-			}
-		}
+        int i = 0;
+        if (tokens[i] == "depth") {
+            int searchDepth = std::stoi(tokens[++i]);
+            search->newDepthSearch(*currentPosition, searchDepth);
+        }
+        else if (tokens[i] == "nodes") {
+            uint64_t searchNodes = std::stoull(tokens[++i]);
+            search->newNodesSearch(*currentPosition, searchNodes);
+        }
+        else if (tokens[i] == "movetime") {
+            uint64_t searchTime = std::stoull(tokens[++i]);
+            search->newTimeSearch(*currentPosition, searchTime);
+        }
+        else if (tokens[i] == "infinite") {
+            search->newInfiniteSearch(*currentPosition);
+        }
+        else {
+            uint64_t whiteTimeLeft = 1, whiteTimeIncrement = 0;
+            uint64_t blackTimeLeft = 1, blackTimeIncrement = 0;
+            int searchMovesToGo = 40;
+            bool ponder = false;
 
-		*currentPosition = notation::toPosition(fen);
-	} else {
-		throw std::exception();
-	}
+            while (i < (int)tokens.size()) {
+                std::string token = tokens[i++];
+                if (token == "wtime")       whiteTimeLeft = std::stoull(tokens[i++]);
+                else if (token == "winc")   whiteTimeIncrement = std::stoull(tokens[i++]);
+                else if (token == "btime")  blackTimeLeft = std::stoull(tokens[i++]);
+                else if (token == "binc")   blackTimeIncrement = std::stoull(tokens[i++]);
+                else if (token == "movestogo") searchMovesToGo = std::stoi(tokens[i++]);
+                else if (token == "ponder") ponder = true;
+            }
 
-	MoveGenerator moveGenerator;
+            if (ponder) {
+                search->newPonderSearch(*currentPosition, whiteTimeLeft, whiteTimeIncrement,
+                    blackTimeLeft, blackTimeIncrement, searchMovesToGo);
+            }
+            else {
+                search->newClockSearch(*currentPosition, whiteTimeLeft, whiteTimeIncrement,
+                    blackTimeLeft, blackTimeIncrement, searchMovesToGo);
+            }
+        }
 
-	while (input >> token) {
-		// Verify moves
-		MoveList<MoveEntry>& moves = moveGenerator.getLegalMoves(*currentPosition, 1, currentPosition->isCheck());
-		bool found = false;
-		for (int i = 0; i < moves.size; i++) {
-			int move = moves.entries[i]->move;
-			if (fromMove(move) == token) {
-				currentPosition->makeMove(move);
-				found = true;
-				break;
-			}
-		}
+        search->start();
+        //startTime = std::chrono::system_clock::now();
+        //statusStartTime = startTime;
+    }
 
-		if (!found) {
-			throw std::exception();
-		}
-	}
+    void Pulse::receivePonderHit() {
+        search->ponderhit();
+    }
 
-	// Don't start searching though!
-}
+    void Pulse::receiveStop() {
+        search->stop();
+    }
 
-void Pulse::receiveGo(std::istringstream& input) {
-	search->stop();
+    void Pulse::sendBestMove(int bestMove, int ponderMove) {
+        lastBestMove = bestMove;
+        lastPonderMove = ponderMove;
+    }
 
-	// We received a start command. Extract all parameters from the
-	// command and start the search.
-	std::string token;
-	input >> token;
-	if (token == "depth") {
-		int searchDepth;
-		if (input >> searchDepth) {
-			search->newDepthSearch(*currentPosition, searchDepth);
-		} else {
-			throw std::exception();
-		}
-	} else if (token == "nodes") {
-		uint64_t searchNodes;
-		if (input >> searchNodes) {
-			search->newNodesSearch(*currentPosition, searchNodes);
-		}
-	} else if (token == "movetime") {
-		uint64_t searchTime;
-		if (input >> searchTime) {
-			search->newTimeSearch(*currentPosition, searchTime);
-		}
-	} else if (token == "infinite") {
-		search->newInfiniteSearch(*currentPosition);
-	} else {
-		uint64_t whiteTimeLeft = 1;
-		uint64_t whiteTimeIncrement = 0;
-		uint64_t blackTimeLeft = 1;
-		uint64_t blackTimeIncrement = 0;
-		int searchMovesToGo = 40;
-		bool ponder = false;
+    void Pulse::sendStatus(int currentDepth, int currentMaxDepth, uint64_t totalNodes, int currentMove, int currentMoveNumber) {
+        // Handled by UE5
+    }
 
-		do {
-			if (token == "wtime") {
-				if (!(input >> whiteTimeLeft)) {
-					throw std::exception();
-				}
-			} else if (token == "winc") {
-				if (!(input >> whiteTimeIncrement)) {
-					throw std::exception();
-				}
-			} else if (token == "btime") {
-				if (!(input >> blackTimeLeft)) {
-					throw std::exception();
-				}
-			} else if (token == "binc") {
-				if (!(input >> blackTimeIncrement)) {
-					throw std::exception();
-				}
-			} else if (token == "movestogo") {
-				if (!(input >> searchMovesToGo)) {
-					throw std::exception();
-				}
-			} else if (token == "ponder") {
-				ponder = true;
-			}
-		} while (input >> token);
+    void Pulse::sendStatus(bool force, int currentDepth, int currentMaxDepth, uint64_t totalNodes, int currentMove, int currentMoveNumber) {
+        // Handled by UE5
+    }
 
-		if (ponder) {
-			search->newPonderSearch(*currentPosition,
-					whiteTimeLeft, whiteTimeIncrement, blackTimeLeft, blackTimeIncrement,
-					searchMovesToGo);
-		} else {
-			search->newClockSearch(*currentPosition,
-					whiteTimeLeft, whiteTimeIncrement, blackTimeLeft, blackTimeIncrement,
-					searchMovesToGo);
-		}
-	}
+    void Pulse::sendMove(RootEntry entry, int currentDepth, int currentMaxDepth, uint64_t totalNodes) {
+        // Handled by UE5
+    }
 
-	// Go...
-	search->start();
-	startTime = std::chrono::system_clock::now();
-	statusStartTime = startTime;
-}
+    void Pulse::sendInfo(const std::string& message) {
+        // Handled by UE5
+    }
 
-void Pulse::receivePonderHit() {
-	// We received a ponder hit command. Just call ponderhit().
-	search->ponderhit();
-}
+    void Pulse::sendDebug(const std::string& message) {
+        // Handled by UE5
+    }
 
-void Pulse::receiveStop() {
-	// We received a stop command. If a search is running, stop it.
-	search->stop();
-}
+    std::string Pulse::fromMove(int move) {
+        std::string n;
+        n += notation::fromSquare(move::getOriginSquare(move));
+        n += notation::fromSquare(move::getTargetSquare(move));
+        int promotion = move::getPromotion(move);
+        if (promotion != piecetype::NOPIECETYPE) {
+            n += (char)::tolower((unsigned char)notation::fromPieceType(promotion));
+        }
+        return n;
+    }
 
-void Pulse::sendBestMove(int bestMove, int ponderMove) {
-	std::cout << "bestmove ";
-
-	if (bestMove != move::NOMOVE) {
-		std::cout << fromMove(bestMove);
-
-		if (ponderMove != move::NOMOVE) {
-			std::cout << " ponder " << fromMove(ponderMove);
-		}
-	} else {
-		std::cout << "nomove";
-	}
-
-	std::cout << std::endl;
-}
-
-void Pulse::sendStatus(
-		int currentDepth, int currentMaxDepth, uint64_t totalNodes, int currentMove, int currentMoveNumber) {
-	if (std::chrono::duration_cast<std::chrono::milliseconds>(
-			std::chrono::system_clock::now() - statusStartTime).count() >= 1000) {
-		sendStatus(false, currentDepth, currentMaxDepth, totalNodes, currentMove, currentMoveNumber);
-	}
-}
-
-void Pulse::sendStatus(
-		bool force, int currentDepth, int currentMaxDepth, uint64_t totalNodes, int currentMove,
-		int currentMoveNumber) {
-	auto timeDelta = std::chrono::duration_cast<std::chrono::milliseconds>(
-			std::chrono::system_clock::now() - startTime);
-
-	if (force || timeDelta.count() >= 1000) {
-		std::cout << "info";
-		std::cout << " depth " << currentDepth;
-		std::cout << " seldepth " << currentMaxDepth;
-		std::cout << " nodes " << totalNodes;
-		std::cout << " time " << timeDelta.count();
-		std::cout << " nps " << (timeDelta.count() >= 1000 ? (totalNodes * 1000) / timeDelta.count() : 0);
-
-		if (currentMove != move::NOMOVE) {
-			std::cout << " currmove " << fromMove(currentMove);
-			std::cout << " currmovenumber " << currentMoveNumber;
-		}
-
-		std::cout << std::endl;
-
-		statusStartTime = std::chrono::system_clock::now();
-	}
-}
-
-void Pulse::sendMove(RootEntry entry, int currentDepth, int currentMaxDepth, uint64_t totalNodes) {
-	auto timeDelta = std::chrono::duration_cast<std::chrono::milliseconds>(
-			std::chrono::system_clock::now() - startTime);
-
-	std::cout << "info";
-	std::cout << " depth " << currentDepth;
-	std::cout << " seldepth " << currentMaxDepth;
-	std::cout << " nodes " << totalNodes;
-	std::cout << " time " << timeDelta.count();
-	std::cout << " nps " << (timeDelta.count() >= 1000 ? (totalNodes * 1000) / timeDelta.count() : 0);
-
-	if (std::abs(entry.value) >= value::CHECKMATE_THRESHOLD) {
-		// Calculate mate distance
-		int mateDepth = value::CHECKMATE - std::abs(entry.value);
-		std::cout << " score mate " << ((entry.value > 0) - (entry.value < 0)) * (mateDepth + 1) / 2;
-	} else {
-		std::cout << " score cp " << entry.value;
-	}
-
-	if (entry.pv.size > 0) {
-		std::cout << " pv";
-		for (int i = 0; i < entry.pv.size; i++) {
-			std::cout << " " << fromMove(entry.pv.moves[i]);
-		}
-	}
-
-	std::cout << std::endl;
-
-	statusStartTime = std::chrono::system_clock::now();
-}
-
-void Pulse::sendInfo(const std::string& message) {
-	std::cout << "info string " << message << std::endl;
-}
-
-void Pulse::sendDebug(const std::string& message) {
-	if (debug) {
-		std::cout << "info string " << message << std::endl;
-	}
-}
-
-std::string Pulse::fromMove(int move) {
-	std::string notation;
-
-	notation += notation::fromSquare(move::getOriginSquare(move));
-	notation += notation::fromSquare(move::getTargetSquare(move));
-
-	int promotion = move::getPromotion(move);
-	if (promotion != piecetype::NOPIECETYPE) {
-		notation += std::tolower(notation::fromPieceType(promotion), std::locale());
-	}
-
-	return notation;
-}
-}
+} // namespace pulse
