@@ -155,9 +155,9 @@ void Search::newPonderSearch(Position& _position,
 }
 
 Search::Search(Protocol& protocol)
-		: protocol(protocol),
-		  timer(timerStopped, doTimeManagement, currentDepth, initialDepth, abort),
-		  wakeupSignal(0), runSignal(0), stopSignal(0) {
+		: wakeupSignal(0), runSignal(0), stopSignal(0),
+		  protocol(protocol),
+		  timer(timerStopped, doTimeManagement, currentDepth, initialDepth, abort) {
 
 	reset();
 
