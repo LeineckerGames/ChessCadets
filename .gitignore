@@ -32,7 +32,6 @@ DerivedDataCache/
 Binaries/
 Build/
 PackagingResults/
-Content/GeneratedTextures/
 
 # --- OS ---
 .DS_Store
