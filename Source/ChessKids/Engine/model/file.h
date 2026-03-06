@@ -6,6 +6,11 @@
 
 #include <array>
 
+// macOS sys/param.h defines NOFILE as a macro — undefine it so our constant works
+#ifdef NOFILE
+#undef NOFILE
+#endif
+
 namespace pulse::file {
 
 constexpr int a = 0;
