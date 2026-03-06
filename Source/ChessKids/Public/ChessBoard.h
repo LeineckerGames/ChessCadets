@@ -36,6 +36,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Board")
 	UMaterialInterface* SelectionMaterial = nullptr;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Board")
+	UMaterialInterface* HoverMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Board")
+	float HighlightZOffset = 2.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Board",
+	          meta = (ClampMin = "0.1", ClampMax = "1.0"))
+	float HighlightScaleFactor = 0.9f;
+
 	// Holographic
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Holographic")
 	UMaterialInterface* GridOverlayMaterial = nullptr;
@@ -62,12 +72,29 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Holographic")
 	float ScanHeight = 80.f; // how high above the board the scan travels before looping
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Holographic")
+	float GridOverlayZOffset = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Holographic",
+	          meta = (ClampMin = "0.01", ClampMax = "1.0"))
+	float ScanPlaneZScale = 0.05f;
+
 	// Edge lights
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Lights")
 	FLinearColor EdgeLightColor = FLinearColor(0.f, 0.7f, 1.f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Lights")
 	float EdgeLightIntensity = 800.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Lights",
+	          meta = (ClampMin = "0.1", ClampMax = "2.0"))
+	float EdgeLightAttenuationScale = 0.75f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Lights")
+	bool bEdgeLightInverseSquaredFalloff = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Lights")
+	float EdgeLightHeight = 5.f;
 
 	// Model snap
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Snap")
@@ -114,6 +141,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Chess|Board")
 	void ClearHighlights();
+
+	UFUNCTION(BlueprintCallable, Category = "Chess|Board")  
+	void HoverSquare(const FString& SquareStr);             
+
+	UFUNCTION(BlueprintCallable, Category = "Chess|Board")  
+	void ClearHover();      
 	
 	UFUNCTION(BlueprintCallable, Category="Chess|Snap")
 	void SnapActorToSquare(AActor* ActorToSnap, int32 File, int32 Rank, float ZOffset = 0.f,bool bSnapRot = false, FRotator Rot = FRotator::ZeroRotator);
@@ -125,6 +158,8 @@ private:
 	UPROPERTY() UStaticMeshComponent* ScanPlaneMesh = nullptr;
 	UPROPERTY() TArray<UPointLightComponent*> EdgeLights;
 	UPROPERTY() TArray<UMaterialInstanceDynamic*> NeonDynMaterials;
+
+	FString HoveredSquare;  
 
 	float NeonPulseTime = 0.f;
 	float ScanOffset = 0.f;
