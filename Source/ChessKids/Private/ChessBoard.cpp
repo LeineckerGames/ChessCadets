@@ -90,7 +90,7 @@ void AChessBoard::BuildBoard()
 		for (int32 File = 0; File < 8; ++File)
 		{
 			const FVector LocalPos(File * SquareSize - HalfBoard,
-			                       Rank * SquareSize - HalfBoard, 0.f);
+			                       HalfBoard - Rank * SquareSize, 0.f);
 			const bool bLight = ((File + Rank) % 2 != 0);
 
 			UStaticMeshComponent* Sq = MakeMeshComp(
@@ -213,7 +213,7 @@ FVector AChessBoard::FileRankToWorldLocation(int32 File, int32 Rank, float ZOffs
 
 	const FVector Local(
 		File * SquareSize - HalfBoard,
-		Rank * SquareSize - HalfBoard,
+		HalfBoard - Rank * SquareSize,
 		ZOffset
 	);
 
@@ -232,7 +232,7 @@ bool AChessBoard::WorldLocationToSquare(FVector WorldLoc, FString& OutSquare) co
 	// transform into board-local space first so rotation doesn't break the math
 	const FVector Local = GetActorTransform().InverseTransformPosition(WorldLoc);
 	const int32 File = FMath::FloorToInt((Local.X + 4.f * SquareSize) / SquareSize);
-	const int32 Rank = FMath::FloorToInt((Local.Y + 4.f * SquareSize) / SquareSize);
+	const int32 Rank = FMath::FloorToInt((4.f * SquareSize - Local.Y) / SquareSize);
 	if (File < 0 || File > 7 || Rank < 0 || Rank > 7) return false;
 	OutSquare = FileRankToSquareName(File, Rank);
 	return true;
