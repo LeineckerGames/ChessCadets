@@ -25,6 +25,12 @@ env/
 pip-log.txt
 pip-delete-this-directory.txt
 
+# --- Xcode ---
+*.xcworkspace/
+*.xcodeproj/
+*.xcuserstate
+xcuserdata/
+
 # --- Unreal Engine ---
 Saved/
 Intermediate/
