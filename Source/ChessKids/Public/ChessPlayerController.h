@@ -8,6 +8,7 @@ class AChessBoard;
 class AChessManager;
 class AChessPiece;
 
+
 UCLASS()
 class CHESSKIDS_API AChessPlayerController : public APlayerController
 {
@@ -16,6 +17,7 @@ class CHESSKIDS_API AChessPlayerController : public APlayerController
 public:
 	AChessPlayerController();
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaTime) override;
 	virtual void SetupInputComponent() override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess")
@@ -25,8 +27,20 @@ public:
 	AChessManager* Manager = nullptr;
 
 private:
+	//Actions
 	void OnSelect();
+	void OnDeselect();
+	void HandleHover();
+	void SelectPieceOnSquare(const FString& Square);
 
+	//state
 	FString SelectedSquare;
+	FString HoveredSquare;
 	bool bPieceSelected = false;
+	bool bIsAIThinking = false;
+	FTimerHandle AITimerHandle;   
+
+
 };
+
+

@@ -36,6 +36,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Board")
 	UMaterialInterface* SelectionMaterial = nullptr;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Board")
+	UMaterialInterface* HoverMaterial = nullptr; 
+
 	// Holographic
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Holographic")
 	UMaterialInterface* GridOverlayMaterial = nullptr;
@@ -114,6 +117,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Chess|Board")
 	void ClearHighlights();
+
+	UFUNCTION(BlueprintCallable, Category = "Chess|Board")  
+	void HoverSquare(const FString& SquareStr);             
+
+	UFUNCTION(BlueprintCallable, Category = "Chess|Board")  
+	void ClearHover();      
 	
 	UFUNCTION(BlueprintCallable, Category="Chess|Snap")
 	void SnapActorToSquare(AActor* ActorToSnap, int32 File, int32 Rank, float ZOffset = 0.f,bool bSnapRot = false, FRotator Rot = FRotator::ZeroRotator);
@@ -125,6 +134,8 @@ private:
 	UPROPERTY() UStaticMeshComponent* ScanPlaneMesh = nullptr;
 	UPROPERTY() TArray<UPointLightComponent*> EdgeLights;
 	UPROPERTY() TArray<UMaterialInstanceDynamic*> NeonDynMaterials;
+
+	FString HoveredSquare;  
 
 	float NeonPulseTime = 0.f;
 	float ScanOffset = 0.f;
