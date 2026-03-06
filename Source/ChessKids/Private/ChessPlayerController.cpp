@@ -7,6 +7,7 @@
 AChessPlayerController::AChessPlayerController()
 {
 	bShowMouseCursor = true;
+	PrimaryActorTick.bCanEverTick = true;  
 }
 
 void AChessPlayerController::BeginPlay()
@@ -14,7 +15,7 @@ void AChessPlayerController::BeginPlay()
 	Super::BeginPlay();
 
 	FInputModeGameAndUI Mode;
-	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::LockInFullscreen);
 	SetInputMode(Mode);
 
 	if (!Board)
@@ -23,76 +24,116 @@ void AChessPlayerController::BeginPlay()
 		Manager = Cast<AChessManager>(UGameplayStatics::GetActorOfClass(this, AChessManager::StaticClass()));
 }
 
+void AChessPlayerController::Tick(float DeltaTime)
+{
+    Super::Tick(DeltaTime);
+    HandleHover();
+}
+
 void AChessPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
 	InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AChessPlayerController::OnSelect);
 }
 
+void AChessPlayerController::HandleHover()
+{
+    if (!Board || !Manager) return;
+
+    FHitResult Hit;
+    bool bHit = GetHitResultUnderCursor(ECC_Visibility, false, Hit);
+
+    if (!bHit)
+    {
+        if (!HoveredSquare.IsEmpty())
+        {
+            Board->ClearHover();
+            HoveredSquare.Empty();
+        }
+        return;
+    }
+
+    FString Square;
+    bool bParsed = Board->WorldLocationToSquare(Hit.Location, Square);
+
+    if (!bParsed) return;
+    if (Square == HoveredSquare) return;
+
+    Board->ClearHover();
+    HoveredSquare = Square;
+    Board->HoverSquare(Square);
+}
+
+void AChessPlayerController::SelectPieceOnSquare(const FString& Square)
+{
+    TArray<FString> LegalMoves = Manager->GetLegalMovesFromSquare(Square);
+    if (LegalMoves.Num() == 0) return;
+
+    SelectedSquare = Square;
+    bPieceSelected = true;
+    Board->SelectSquare(Square);
+    Board->ShowLegalMoveTargets(LegalMoves);
+}
+
+void AChessPlayerController::OnDeselect()
+{
+    if (!bPieceSelected) return;
+    bPieceSelected = false;
+    HoveredSquare.Empty();
+    Board->ClearHighlights();
+}
+
 void AChessPlayerController::OnSelect()
 {
-	if (!Board || !Manager) return;
+    if (!Board || !Manager || bIsAIThinking) return;     
+    if (Manager->GetActiveColor() != TEXT("white")) return;
 
-	if (Manager->GetActiveColor() != TEXT("white")) return;
+    FHitResult Hit;
+    if (!GetHitResultUnderCursor(ECC_Visibility, false, Hit))
+        return;
 
-	FHitResult Hit;
-	if (!GetHitResultUnderCursor(ECC_Visibility, false, Hit))
-		return;
+    FString ClickedSquare;
+    if (!Board->WorldLocationToSquare(Hit.Location, ClickedSquare))
+        return;
 
-	FString ClickedSquare;
-	if (!Board->WorldLocationToSquare(Hit.Location, ClickedSquare))
-		return;
+    if (!bPieceSelected)
+    {
+        FString PieceStr = Manager->GetPieceOnSquare(ClickedSquare);
+        if (PieceStr.IsEmpty() || !FChar::IsUpper(PieceStr[0])) return;
+        SelectPieceOnSquare(ClickedSquare);              
+    }
+    else
+    {
+        Board->ClearHighlights();
 
-	if (!bPieceSelected)
-	{
-		FString PieceStr = Manager->GetPieceOnSquare(ClickedSquare);
-		if (PieceStr.IsEmpty()) return;
+        if (ClickedSquare == SelectedSquare)
+        {
+            bPieceSelected = false;
+            return;
+        }
 
-		if (!FChar::IsUpper(PieceStr[0])) return;
+        FString PieceStr = Manager->GetPieceOnSquare(ClickedSquare);
+        if (!PieceStr.IsEmpty() && FChar::IsUpper(PieceStr[0]))
+        {
+            SelectPieceOnSquare(ClickedSquare);          
+            return;
+        }
 
-		TArray<FString> LegalMoves = Manager->GetLegalMovesFromSquare(ClickedSquare);
-		if (LegalMoves.Num() == 0) return;
+        FString MoveStr = SelectedSquare + ClickedSquare;
+        bool bSuccess = Manager->MakeMove(MoveStr);
+        bPieceSelected = false;
 
-		SelectedSquare = ClickedSquare;
-		bPieceSelected = true;
-
-		Board->SelectSquare(ClickedSquare);
-		Board->ShowLegalMoveTargets(LegalMoves);
-	}
-	else
-	{
-		Board->ClearHighlights();
-
-		if (ClickedSquare == SelectedSquare)
-		{
-			bPieceSelected = false;
-			return;
-		}
-
-		FString PieceStr = Manager->GetPieceOnSquare(ClickedSquare);
-		if (!PieceStr.IsEmpty() && FChar::IsUpper(PieceStr[0]))
-		{
-			TArray<FString> LegalMoves = Manager->GetLegalMovesFromSquare(ClickedSquare);
-			if (LegalMoves.Num() > 0)
-			{
-				SelectedSquare = ClickedSquare;
-				Board->SelectSquare(ClickedSquare);
-				Board->ShowLegalMoveTargets(LegalMoves);
-				return;
-			}
-		}
-
-		FString MoveStr = SelectedSquare + ClickedSquare;
-		bool bSuccess = Manager->MakeMove(MoveStr);
-		bPieceSelected = false;
-
-		if (bSuccess)
-		{
-			FTimerHandle TimerHandle;
-			GetWorldTimerManager().SetTimer(TimerHandle, [this]()
-			{
-				if (Manager) Manager->RequestAIMove();
-			}, 0.5f, false);
-		}
-	}
+        if (bSuccess)
+        {
+            bIsAIThinking = true;                        
+            GetWorldTimerManager().SetTimer(AITimerHandle, [this]()  
+            {
+                if (Manager) Manager->RequestAIMove();
+                bIsAIThinking = false;                   
+            }, 0.5f, false);
+        }
+    }
 }
+
+
+
