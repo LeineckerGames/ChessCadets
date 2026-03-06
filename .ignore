@@ -1,0 +1,13 @@
+/.git
+/.github
+/.vs
+/.vscode
+/Chess3DK
+/Content
+/DerivedDataCache
+/Intermediate
+/Saved
+/Plugins/VisualStudioTools/azure-pipelines
+/Plugins/VisualStudioTools/Docs
+/Plugins/VisualStudioTools/Intermediate
+/Plugins/VisualStudioTools/Scripts
