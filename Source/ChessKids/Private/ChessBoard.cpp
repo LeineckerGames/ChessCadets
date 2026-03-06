@@ -47,7 +47,7 @@ void AChessBoard::Tick(float DeltaTime)
 	if (IsValid(ScanPlaneMesh) && ScanSpeed > 0.f)
 	{
 		ScanOffset = FMath::Fmod(ScanOffset + DeltaTime * ScanSpeed, ScanHeight);
-		ScanPlaneMesh->SetRelativeLocation(FVector(0.f, 0.f, 1.f + ScanOffset));
+		ScanPlaneMesh->SetRelativeLocation(FVector(0.f, 0.f, GridOverlayZOffset + ScanOffset));
 	}
 }
 
@@ -102,8 +102,8 @@ void AChessBoard::BuildBoard()
 
 			UStaticMeshComponent* Hl = MakeMeshComp(
 				this, *FString::Printf(TEXT("Hl_%d_%d"), File, Rank),
-				PlaneMesh, GetRootComponent(), LocalPos + FVector(0.f, 0.f, 2.f), // ← raise Z
-				FVector(Scale * 0.9f, Scale * 0.9f, 5.f), nullptr);
+				PlaneMesh, GetRootComponent(), LocalPos + FVector(0.f, 0.f, HighlightZOffset),
+				FVector(Scale * HighlightScaleFactor, Scale * HighlightScaleFactor, 5.f), nullptr);
 			Hl->SetVisibility(false);
 			HighlightMeshes.Add(Hl);
 		}
@@ -130,11 +130,10 @@ void AChessBoard::BuildHolographicFrame()
 
 	// neon grid overlay over the whole 8x8 surface
 	GridOverlayMesh = MakeMeshComp(this, TEXT("GridOverlay"), PlaneMesh, GetRootComponent(),
-		FVector(0.f, 0.f, 1.f), FVector(GridScale, GridScale, 1.f), GridOverlayMaterial);
+		FVector(0.f, 0.f, GridOverlayZOffset), FVector(GridScale, GridScale, 1.f), GridOverlayMaterial);
 
-	// thin scan plane — Tick moves it upward through ScanHeight then loops
 	ScanPlaneMesh = MakeMeshComp(this, TEXT("ScanPlane"), PlaneMesh, GetRootComponent(),
-		FVector(0.f, 0.f, 1.f), FVector(GridScale, GridScale, 0.05f), HolographicScanMaterial);
+		FVector(0.f, 0.f, GridOverlayZOffset), FVector(GridScale, GridScale, ScanPlaneZScale), HolographicScanMaterial);
 
 	// one point light per edge, sitting just above the board surface
 	auto AddLight = [&](FName Name, FVector Pos)
@@ -145,15 +144,15 @@ void AChessBoard::BuildHolographicFrame()
 		L->SetRelativeLocation(Pos);
 		L->SetLightColor(EdgeLightColor);
 		L->Intensity = EdgeLightIntensity;
-		L->AttenuationRadius = FullBoard * 0.75f;
-		L->bUseInverseSquaredFalloff = false;
+		L->AttenuationRadius = FullBoard * EdgeLightAttenuationScale;
+		L->bUseInverseSquaredFalloff = bEdgeLightInverseSquaredFalloff;
 		EdgeLights.Add(L);
 	};
 
-	AddLight(TEXT("Light_PY"), FVector(0.f,        BoardEdge, 5.f));
-	AddLight(TEXT("Light_NY"), FVector(0.f,       -BoardEdge, 5.f));
-	AddLight(TEXT("Light_PX"), FVector( BoardEdge, 0.f,       5.f));
-	AddLight(TEXT("Light_NX"), FVector(-BoardEdge, 0.f,       5.f));
+	AddLight(TEXT("Light_PY"), FVector(0.f,        BoardEdge, EdgeLightHeight));
+	AddLight(TEXT("Light_NY"), FVector(0.f,       -BoardEdge, EdgeLightHeight));
+	AddLight(TEXT("Light_PX"), FVector( BoardEdge, 0.f,       EdgeLightHeight));
+	AddLight(TEXT("Light_NX"), FVector(-BoardEdge, 0.f,       EdgeLightHeight));
 }
 
 //Neon DMIs

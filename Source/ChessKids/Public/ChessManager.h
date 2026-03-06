@@ -42,6 +42,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess")
 	AChessBoard* Board = nullptr;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Pieces")
+	TMap<EChessPieceType, FPieceMeshConfig> WhitePieceMeshes;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Pieces")
+	TMap<EChessPieceType, FPieceMeshConfig> BlackPieceMeshes;
+
 	UFUNCTION(BlueprintCallable, Category = "Chess")
 	void NewGame();
 
