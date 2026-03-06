@@ -13,5 +13,7 @@ public class Chess4kEditorTarget : TargetRules
         DefaultBuildSettings = BuildSettingsVersion.V6;
         IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_7;
         ExtraModuleNames.AddRange(new string[] { "Chess4k" });
+         
+
     }
 }
