@@ -334,11 +334,38 @@ void AChessManager::SpawnAllPieces()
 			FActorSpawnParameters Params;
 			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-			AChessPiece* Piece = GetWorld()->SpawnActor<AChessPiece>(SpawnLoc, FRotator::ZeroRotator, Params);
+			const TMap<EChessPieceType, FPieceMeshConfig>& MeshMap =
+				(Color == EChessColor::White) ? WhitePieceMeshes : BlackPieceMeshes;
+			const FPieceMeshConfig* Override = MeshMap.Find(Type);
+
+			FRotator SpawnRot = FRotator::ZeroRotator;
+			AChessPiece* Piece = nullptr;
+
+			if (Override && Override->PieceClass)
+			{
+				AActor* Spawned = GetWorld()->SpawnActor(Override->PieceClass.Get(), &SpawnLoc, &SpawnRot, Params);
+				Piece = Cast<AChessPiece>(Spawned);
+			}
+			else
+			{
+				Piece = GetWorld()->SpawnActor<AChessPiece>(SpawnLoc, SpawnRot, Params);
+			}
 			if (Piece)
 			{
-				Piece->Init(Type, Color, File, Rank);
-				Board->SnapActorToSquare(Piece, File, Rank, 0.f);
+				if (Override && Override->PieceClass)
+				{
+					Piece->PieceType = Type;
+					Piece->PieceColor = Color;
+					Piece->BoardFile = File;
+					Piece->BoardRank = Rank;
+					Piece->SetActorScale3D(Override->Scale);
+				}
+				else
+				{
+					Piece->Init(Type, Color, File, Rank, Override);
+				}
+				float ZOff = (Override && Override->PieceClass) ? Override->ZOffset : 0.f;
+				Board->SnapActorToSquare(Piece, File, Rank, ZOff);
 				PieceActors.Add(SquareName, Piece);
 			}
 		}
