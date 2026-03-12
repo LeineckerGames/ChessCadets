@@ -1,317 +1,322 @@
-// Copyright 2013-2023 Phokham Nonava
-//
-// Use of this source code is governed by the MIT license that can be
-// found in the LICENSE file.
-
 #include "notation.h"
 #include "model/file.h"
 #include "model/rank.h"
 #include "model/castlingtype.h"
-
-#include <sstream>
-#include <locale>
+#include <string>
+#include <cctype>
 
 namespace pulse::notation {
-namespace {
-constexpr char WHITE_NOTATION = 'w';
-constexpr char BLACK_NOTATION = 'b';
+	namespace {
+		constexpr char WHITE_NOTATION = 'w';
+		constexpr char BLACK_NOTATION = 'b';
 
-constexpr char PAWN_NOTATION = 'P';
-constexpr char KNIGHT_NOTATION = 'N';
-constexpr char BISHOP_NOTATION = 'B';
-constexpr char ROOK_NOTATION = 'R';
-constexpr char QUEEN_NOTATION = 'Q';
-constexpr char KING_NOTATION = 'K';
+		constexpr char PAWN_NOTATION = 'P';
+		constexpr char KNIGHT_NOTATION = 'N';
+		constexpr char BISHOP_NOTATION = 'B';
+		constexpr char ROOK_NOTATION = 'R';
+		constexpr char QUEEN_NOTATION = 'Q';
+		constexpr char KING_NOTATION = 'K';
 
-constexpr char KINGSIDE_NOTATION = 'K';
-constexpr char QUEENSIDE_NOTATION = 'Q';
+		constexpr char KINGSIDE_NOTATION = 'K';
+		constexpr char QUEENSIDE_NOTATION = 'Q';
 
-constexpr char a_NOTATION = 'a';
-constexpr char b_NOTATION = 'b';
-constexpr char c_NOTATION = 'c';
-constexpr char d_NOTATION = 'd';
-constexpr char e_NOTATION = 'e';
-constexpr char f_NOTATION = 'f';
-constexpr char g_NOTATION = 'g';
-constexpr char h_NOTATION = 'h';
+		constexpr char a_NOTATION = 'a';
+		constexpr char b_NOTATION = 'b';
+		constexpr char c_NOTATION = 'c';
+		constexpr char d_NOTATION = 'd';
+		constexpr char e_NOTATION = 'e';
+		constexpr char f_NOTATION = 'f';
+		constexpr char g_NOTATION = 'g';
+		constexpr char h_NOTATION = 'h';
 
-constexpr char r1_NOTATION = '1';
-constexpr char r2_NOTATION = '2';
-constexpr char r3_NOTATION = '3';
-constexpr char r4_NOTATION = '4';
-constexpr char r5_NOTATION = '5';
-constexpr char r6_NOTATION = '6';
-constexpr char r7_NOTATION = '7';
-constexpr char r8_NOTATION = '8';
+		constexpr char r1_NOTATION = '1';
+		constexpr char r2_NOTATION = '2';
+		constexpr char r3_NOTATION = '3';
+		constexpr char r4_NOTATION = '4';
+		constexpr char r5_NOTATION = '5';
+		constexpr char r6_NOTATION = '6';
+		constexpr char r7_NOTATION = '7';
+		constexpr char r8_NOTATION = '8';
 
-int colorOf(char notation) {
-	if (std::islower(notation)) {
-		return color::BLACK;
-	} else {
-		return color::WHITE;
-	}
-}
-
-char transform(char notation, int color) {
-	switch (color) {
-		case color::WHITE:
-			return std::toupper(notation, std::locale());
-		case color::BLACK:
-			return std::tolower(notation, std::locale());
-		default:
-			throw std::exception();
-	}
-}
-}
-
-Position toPosition(const std::string& fen) {
-	Position position;
-
-	// Clean and split into tokens
-	std::vector<std::string> tokens;
-	std::stringstream ss(fen);
-	std::string token;
-	while (std::getline(ss, token, ' ')) {
-		if (!token.empty()) {
-			tokens.push_back(token);
+		int colorOf(char notation) {
+			if (::islower((unsigned char)notation)) {
+				return color::BLACK;
+			}
+			else {
+				return color::WHITE;
+			}
 		}
-	}
 
-	// halfmove clock and fullmove number are optional
-	if (tokens.size() < 4 || tokens.size() > 6) {
-		throw std::exception();
-	}
-
-	unsigned int tokensIndex = 0;
-
-	// Parse pieces
-	token = tokens[tokensIndex++];
-	int file = file::a;
-	int rank = rank::r8;
-
-	for (auto character: token) {
-		int piece = toPiece(character);
-		if (piece != piece::NOPIECE) {
-			if (!file::isValid(file) || !rank::isValid(rank)) {
-				throw std::invalid_argument("Illegal file or rank");
-			}
-
-			position.put(piece, square::valueOf(file, rank));
-
-			if (file == file::h) {
-				file = file::NOFILE;
-			} else {
-				file++;
-			}
-		} else if (character == '/') {
-			if (file != file::NOFILE || rank == rank::r1) {
-				throw std::invalid_argument("Illegal file or rank");
-			}
-
-			file = file::a;
-			rank--;
-		} else {
-			std::string s = {character};
-			int emptySquares = std::stoi(s);
-			if (emptySquares < 1 || 8 < emptySquares) {
-				throw std::invalid_argument("Illegal number of empty squares");
-			}
-
-			file += emptySquares - 1;
-			if (!file::isValid(file)) {
-				throw std::invalid_argument("Illegal number of empty squares");
-			}
-
-			if (file == file::h) {
-				file = file::NOFILE;
-			} else {
-				file++;
+		char transform(char notation, int color) {
+			switch (color) {
+			case color::WHITE:
+				return (char)::toupper((unsigned char)notation);
+			case color::BLACK:
+				return (char)::tolower((unsigned char)notation);
+			default:
+				throw std::exception();
 			}
 		}
 	}
 
-	// Parse active color
-	token = tokens[tokensIndex++];
+	Position toPosition(const std::string& fen) {
+		Position position;
 
-	if (token.length() != 1) {
-		throw std::exception();
-	}
-
-	int activeColor = toColor(token[0]);
-	if (activeColor == color::NOCOLOR) {
-		throw std::exception();
-	}
-	position.setActiveColor(activeColor);
-
-	// Parse castling rights
-	token = tokens[tokensIndex++];
-
-	if (token != "-") {
-		for (auto character: token) {
-			int castling = toCastling(character);
-			if (castling == castling::NOCASTLING) {
-				int castlingFile = toFile(character);
-				if (castlingFile == file::NOFILE) {
-					throw std::exception();
-				}
-
-				int color = colorOf(character);
-
-				if (position.pieces[color][piecetype::KING] == 0) {
-					throw std::exception();
-				}
-
-				int kingFile = square::getFile(bitboard::next(position.pieces[color][piecetype::KING]));
-				if (castlingFile > kingFile) {
-					castling = castling::valueOf(color, castlingtype::KINGSIDE);
-				} else {
-					castling = castling::valueOf(color, castlingtype::QUEENSIDE);
-				}
-			}
-
-			position.setCastlingRight(castling);
+		// Clean and split into tokens
+		std::vector<std::string> tokens;
+		std::string remaining = fen;
+		std::string token;
+		size_t pos;
+		while ((pos = remaining.find(' ')) != std::string::npos) {
+			token = remaining.substr(0, pos);
+			if (!token.empty()) tokens.push_back(token);
+			remaining = remaining.substr(pos + 1);
 		}
-	}
+		if (!remaining.empty()) tokens.push_back(remaining);
 
-	// Parse en passant square
-	token = tokens[tokensIndex++];
-
-	if (token != "-") {
-		if (token.length() != 2) {
+		// halfmove clock and fullmove number are optional
+		if (tokens.size() < 4 || tokens.size() > 6) {
 			throw std::exception();
 		}
 
-		int enPassantFile = toFile(token[0]);
-		int enPassantRank = toRank(token[1]);
-		if (!(activeColor == color::BLACK && enPassantRank == rank::r3)
-			&& !(activeColor == color::WHITE && enPassantRank == rank::r6)) {
-			throw std::exception();
+		unsigned int tokensIndex = 0;
+
+		// Parse pieces
+		token = tokens[tokensIndex++];
+		int file = file::a;
+		int rank = rank::r8;
+
+		for (auto character : token) {
+			int piece = toPiece(character);
+			if (piece != piece::NOPIECE) {
+				if (!file::isValid(file) || !rank::isValid(rank)) {
+					throw std::invalid_argument("Illegal file or rank");
+				}
+
+				position.put(piece, square::valueOf(file, rank));
+
+				if (file == file::h) {
+					file = file::NOFILE;
+				}
+				else {
+					file++;
+				}
+			}
+			else if (character == '/') {
+				if (file != file::NOFILE || rank == rank::r1) {
+					throw std::invalid_argument("Illegal file or rank");
+				}
+
+				file = file::a;
+				rank--;
+			}
+			else {
+				std::string s = { character };
+				int emptySquares = std::stoi(s);
+				if (emptySquares < 1 || 8 < emptySquares) {
+					throw std::invalid_argument("Illegal number of empty squares");
+				}
+
+				file += emptySquares - 1;
+				if (!file::isValid(file)) {
+					throw std::invalid_argument("Illegal number of empty squares");
+				}
+
+				if (file == file::h) {
+					file = file::NOFILE;
+				}
+				else {
+					file++;
+				}
+			}
 		}
 
-		position.setEnPassantSquare(square::valueOf(enPassantFile, enPassantRank));
-	}
-
-	// Parse halfmove clock
-	if (tokens.size() >= 5) {
+		// Parse active color
 		token = tokens[tokensIndex++];
 
-		int number = std::stoi(token);
-		if (number < 0) {
+		if (token.length() != 1) {
 			throw std::exception();
 		}
 
-		position.setHalfmoveClock(number);
-	}
+		int activeColor = toColor(token[0]);
+		if (activeColor == color::NOCOLOR) {
+			throw std::exception();
+		}
+		position.setActiveColor(activeColor);
 
-	// Parse fullmove number
-	if (tokens.size() == 6) {
+		// Parse castling rights
 		token = tokens[tokensIndex++];
 
-		int number = std::stoi(token);
-		if (number < 1) {
-			throw std::exception();
-		}
+		if (token != "-") {
+			for (auto character : token) {
+				int castling = toCastling(character);
+				if (castling == castling::NOCASTLING) {
+					int castlingFile = toFile(character);
+					if (castlingFile == file::NOFILE) {
+						throw std::exception();
+					}
 
-		position.setFullmoveNumber(number);
-	}
+					int color = colorOf(character);
 
-	return position;
-}
+					if (position.pieces[color][piecetype::KING] == 0) {
+						throw std::exception();
+					}
 
-std::string fromPosition(const Position& position) {
-	std::string fen;
-
-	// Pieces
-	for (auto iter = rank::values.rbegin(); iter != rank::values.rend(); iter++) {
-		int rank = *iter;
-		unsigned int emptySquares = 0;
-
-		for (auto file: file::values) {
-			int piece = position.board[square::valueOf(file, rank)];
-
-			if (piece == piece::NOPIECE) {
-				emptySquares++;
-			} else {
-				if (emptySquares > 0) {
-					fen += std::to_string(emptySquares);
-					emptySquares = 0;
+					int kingFile = square::getFile(bitboard::next(position.pieces[color][piecetype::KING]));
+					if (castlingFile > kingFile) {
+						castling = castling::valueOf(color, castlingtype::KINGSIDE);
+					}
+					else {
+						castling = castling::valueOf(color, castlingtype::QUEENSIDE);
+					}
 				}
-				fen += fromPiece(piece);
+
+				position.setCastlingRight(castling);
 			}
 		}
 
-		if (emptySquares > 0) {
-			fen += std::to_string(emptySquares);
+		// Parse en passant square
+		token = tokens[tokensIndex++];
+
+		if (token != "-") {
+			if (token.length() != 2) {
+				throw std::exception();
+			}
+
+			int enPassantFile = toFile(token[0]);
+			int enPassantRank = toRank(token[1]);
+			if (!(activeColor == color::BLACK && enPassantRank == rank::r3)
+				&& !(activeColor == color::WHITE && enPassantRank == rank::r6)) {
+				throw std::exception();
+			}
+
+			position.setEnPassantSquare(square::valueOf(enPassantFile, enPassantRank));
 		}
 
-		if (rank > rank::r1) {
-			fen += '/';
+		// Parse halfmove clock
+		if (tokens.size() >= 5) {
+			token = tokens[tokensIndex++];
+
+			int number = std::stoi(token);
+			if (number < 0) {
+				throw std::exception();
+			}
+
+			position.setHalfmoveClock(number);
 		}
+
+		// Parse fullmove number
+		if (tokens.size() == 6) {
+			token = tokens[tokensIndex++];
+
+			int number = std::stoi(token);
+			if (number < 1) {
+				throw std::exception();
+			}
+
+			position.setFullmoveNumber(number);
+		}
+
+		return position;
 	}
 
-	fen += ' ';
+	std::string fromPosition(const Position& position) {
+		std::string fen;
 
-	// Color
-	fen += fromColor(position.activeColor);
+		// Pieces
+		for (auto iter = rank::values.rbegin(); iter != rank::values.rend(); iter++) {
+			int rank = *iter;
+			unsigned int emptySquares = 0;
 
-	fen += ' ';
+			for (auto file : file::values) {
+				int piece = position.board[square::valueOf(file, rank)];
 
-	// Castling
-	std::string castlingNotation;
-	if ((position.castlingRights & castling::WHITE_KINGSIDE) != castling::NOCASTLING) {
-		castlingNotation += fromCastling(castling::WHITE_KINGSIDE);
+				if (piece == piece::NOPIECE) {
+					emptySquares++;
+				}
+				else {
+					if (emptySquares > 0) {
+						fen += std::to_string(emptySquares);
+						emptySquares = 0;
+					}
+					fen += fromPiece(piece);
+				}
+			}
+
+			if (emptySquares > 0) {
+				fen += std::to_string(emptySquares);
+			}
+
+			if (rank > rank::r1) {
+				fen += '/';
+			}
+		}
+
+		fen += ' ';
+
+		// Color
+		fen += fromColor(position.activeColor);
+
+		fen += ' ';
+
+		// Castling
+		std::string castlingNotation;
+		if ((position.castlingRights & castling::WHITE_KINGSIDE) != castling::NOCASTLING) {
+			castlingNotation += fromCastling(castling::WHITE_KINGSIDE);
+		}
+		if ((position.castlingRights & castling::WHITE_QUEENSIDE) != castling::NOCASTLING) {
+			castlingNotation += fromCastling(castling::WHITE_QUEENSIDE);
+		}
+		if ((position.castlingRights & castling::BLACK_KINGSIDE) != castling::NOCASTLING) {
+			castlingNotation += fromCastling(castling::BLACK_KINGSIDE);
+		}
+		if ((position.castlingRights & castling::BLACK_QUEENSIDE) != castling::NOCASTLING) {
+			castlingNotation += fromCastling(castling::BLACK_QUEENSIDE);
+		}
+		if (castlingNotation.empty()) {
+			fen += '-';
+		}
+		else {
+			fen += castlingNotation;
+		}
+
+		fen += ' ';
+
+		// En passant
+		if (position.enPassantSquare != square::NOSQUARE) {
+			fen += fromSquare(position.enPassantSquare);
+		}
+		else {
+			fen += '-';
+		}
+
+		fen += ' ';
+
+		// Halfmove clock
+		fen += std::to_string(position.halfmoveClock);
+
+		fen += ' ';
+
+		// Fullmove number
+		fen += std::to_string(position.getFullmoveNumber());
+
+		return fen;
 	}
-	if ((position.castlingRights & castling::WHITE_QUEENSIDE) != castling::NOCASTLING) {
-		castlingNotation += fromCastling(castling::WHITE_QUEENSIDE);
-	}
-	if ((position.castlingRights & castling::BLACK_KINGSIDE) != castling::NOCASTLING) {
-		castlingNotation += fromCastling(castling::BLACK_KINGSIDE);
-	}
-	if ((position.castlingRights & castling::BLACK_QUEENSIDE) != castling::NOCASTLING) {
-		castlingNotation += fromCastling(castling::BLACK_QUEENSIDE);
-	}
-	if (castlingNotation.empty()) {
-		fen += '-';
-	} else {
-		fen += castlingNotation;
-	}
 
-	fen += ' ';
-
-	// En passant
-	if (position.enPassantSquare != square::NOSQUARE) {
-		fen += fromSquare(position.enPassantSquare);
-	} else {
-		fen += '-';
-	}
-
-	fen += ' ';
-
-	// Halfmove clock
-	fen += std::to_string(position.halfmoveClock);
-
-	fen += ' ';
-
-	// Fullmove number
-	fen += std::to_string(position.getFullmoveNumber());
-
-	return fen;
-}
-
-int toColor(char notation) {
-	char lowercaseNotation = std::tolower(notation, std::locale());
-	switch (lowercaseNotation) {
+	int toColor(char notation) {
+		char lowercaseNotation = (char)::tolower((unsigned char)notation);
+		switch (lowercaseNotation) {
 		case WHITE_NOTATION:
 			return color::WHITE;
 		case BLACK_NOTATION:
 			return color::BLACK;
 		default:
 			return color::NOCOLOR;
+		}
 	}
-}
 
-char fromColor(int color) {
-	switch (color) {
+	char fromColor(int color) {
+		switch (color) {
 		case color::WHITE:
 			return WHITE_NOTATION;
 		case color::BLACK:
@@ -319,12 +324,12 @@ char fromColor(int color) {
 		case color::NOCOLOR:
 		default:
 			throw std::exception();
+		}
 	}
-}
 
-int toPieceType(char notation) {
-	char uppercaseNotation = std::toupper(notation, std::locale());
-	switch (uppercaseNotation) {
+	int toPieceType(char notation) {
+		char uppercaseNotation = (char)::toupper((unsigned char)notation);
+		switch (uppercaseNotation) {
 		case PAWN_NOTATION:
 			return piecetype::PAWN;
 		case KNIGHT_NOTATION:
@@ -339,11 +344,11 @@ int toPieceType(char notation) {
 			return piecetype::KING;
 		default:
 			return piecetype::NOPIECETYPE;
+		}
 	}
-}
 
-char fromPieceType(int piecetype) {
-	switch (piecetype) {
+	char fromPieceType(int piecetype) {
+		switch (piecetype) {
 		case piecetype::PAWN:
 			return PAWN_NOTATION;
 		case piecetype::KNIGHT:
@@ -359,38 +364,39 @@ char fromPieceType(int piecetype) {
 		case piecetype::NOPIECETYPE:
 		default:
 			throw std::exception();
+		}
 	}
-}
 
-int toPiece(char notation) {
-	int color = colorOf(notation);
-	int piecetype = toPieceType(notation);
+	int toPiece(char notation) {
+		int color = colorOf(notation);
+		int piecetype = toPieceType(notation);
 
-	if (piecetype != piecetype::NOPIECETYPE) {
-		return piece::valueOf(color, piecetype);
-	} else {
-		return piece::NOPIECE;
+		if (piecetype != piecetype::NOPIECETYPE) {
+			return piece::valueOf(color, piecetype);
+		}
+		else {
+			return piece::NOPIECE;
+		}
 	}
-}
 
-char fromPiece(int piece) {
-	return transform(fromPieceType(piece::getType(piece)), piece::getColor(piece));
-}
+	char fromPiece(int piece) {
+		return transform(fromPieceType(piece::getType(piece)), piece::getColor(piece));
+	}
 
-int toCastlingType(char notation) {
-	char uppercaseNotation = std::toupper(notation, std::locale());
-	switch (uppercaseNotation) {
+	int toCastlingType(char notation) {
+		char uppercaseNotation = (char)::toupper((unsigned char)notation);
+		switch (uppercaseNotation) {
 		case KINGSIDE_NOTATION:
 			return castlingtype::KINGSIDE;
 		case QUEENSIDE_NOTATION:
 			return castlingtype::QUEENSIDE;
 		default:
 			return castlingtype::NOCASTLINGTYPE;
+		}
 	}
-}
 
-char fromCastlingType(int castlingtype) {
-	switch (castlingtype) {
+	char fromCastlingType(int castlingtype) {
+		switch (castlingtype) {
 		case castlingtype::KINGSIDE:
 			return KINGSIDE_NOTATION;
 		case castlingtype::QUEENSIDE:
@@ -398,27 +404,28 @@ char fromCastlingType(int castlingtype) {
 		case castlingtype::NOCASTLINGTYPE:
 		default:
 			throw std::exception();
+		}
 	}
-}
 
-int toCastling(char notation) {
-	int color = colorOf(notation);
-	int castlingtype = toCastlingType(notation);
+	int toCastling(char notation) {
+		int color = colorOf(notation);
+		int castlingtype = toCastlingType(notation);
 
-	if (castlingtype != castlingtype::NOCASTLINGTYPE) {
-		return castling::valueOf(color, castlingtype);
-	} else {
-		return castling::NOCASTLING;
+		if (castlingtype != castlingtype::NOCASTLINGTYPE) {
+			return castling::valueOf(color, castlingtype);
+		}
+		else {
+			return castling::NOCASTLING;
+		}
 	}
-}
 
-char fromCastling(int castling) {
-	return transform(fromCastlingType(castling::getType(castling)), castling::getColor(castling));
-}
+	char fromCastling(int castling) {
+		return transform(fromCastlingType(castling::getType(castling)), castling::getColor(castling));
+	}
 
-int toFile(char notation) {
-	char lowercaseNotation = std::tolower(notation, std::locale());
-	switch (lowercaseNotation) {
+	int toFile(char notation) {
+		char lowercaseNotation = (char)::tolower((unsigned char)notation);
+		switch (lowercaseNotation) {
 		case a_NOTATION:
 			return file::a;
 		case b_NOTATION:
@@ -437,11 +444,11 @@ int toFile(char notation) {
 			return file::h;
 		default:
 			return file::NOFILE;
+		}
 	}
-}
 
-char fromFile(int file) {
-	switch (file) {
+	char fromFile(int file) {
+		switch (file) {
 		case file::a:
 			return a_NOTATION;
 		case file::b:
@@ -461,11 +468,11 @@ char fromFile(int file) {
 		case file::NOFILE:
 		default:
 			throw std::exception();
+		}
 	}
-}
 
-int toRank(char notation) {
-	switch (notation) {
+	int toRank(char notation) {
+		switch (notation) {
 		case r1_NOTATION:
 			return rank::r1;
 		case r2_NOTATION:
@@ -484,11 +491,11 @@ int toRank(char notation) {
 			return rank::r8;
 		default:
 			return rank::NORANK;
+		}
 	}
-}
 
-char fromRank(int rank) {
-	switch (rank) {
+	char fromRank(int rank) {
+		switch (rank) {
 		case rank::r1:
 			return r1_NOTATION;
 		case rank::r2:
@@ -508,14 +515,14 @@ char fromRank(int rank) {
 		case rank::NORANK:
 		default:
 			throw std::exception();
+		}
 	}
-}
 
-std::string fromSquare(int square) {
-	std::string notation;
-	notation += fromFile(square::getFile(square));
-	notation += fromRank(square::getRank(square));
+	std::string fromSquare(int square) {
+		std::string notation;
+		notation += fromFile(square::getFile(square));
+		notation += fromRank(square::getRank(square));
 
-	return notation;
-}
+		return notation;
+	}
 }
