@@ -16,17 +16,30 @@ AChessPiece::AChessPiece()
 	MeshComp->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 }
 
-void AChessPiece::Init(EChessPieceType Type, EChessColor Color, int32 File, int32 Rank)
+void AChessPiece::Init(EChessPieceType Type, EChessColor Color, int32 File, int32 Rank, const FPieceMeshConfig* MeshOverride)
 {
 	PieceType = Type;
 	PieceColor = Color;
 	BoardFile = File;
 	BoardRank = Rank;
-	SetupMeshAndMaterial();
+	SetupMeshAndMaterial(MeshOverride);
 }
 
-void AChessPiece::SetupMeshAndMaterial()
+void AChessPiece::SetupMeshAndMaterial(const FPieceMeshConfig* MeshOverride)
 {
+	if (MeshOverride && MeshOverride->Mesh)
+	{
+		MeshComp->SetStaticMesh(MeshOverride->Mesh);
+		MeshComp->SetRelativeScale3D(MeshOverride->Scale);
+		MeshComp->SetRelativeLocation(FVector(0.f, 0.f, MeshOverride->ZOffset));
+
+		if (MeshOverride->MaterialOverride)
+		{
+			MeshComp->SetMaterial(0, MeshOverride->MaterialOverride);
+		}
+		return;
+	}
+
 	const TCHAR* MeshPath = nullptr;
 	FVector Scale = FVector(0.4f, 0.4f, 0.4f);
 
