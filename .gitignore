@@ -43,6 +43,9 @@ PackagingResults/
 .DS_Store
 Thumbs.db
 
+# --- Claude ---
+.claude/
+
 # --- Misc ---
 *.log
 *.tmp
