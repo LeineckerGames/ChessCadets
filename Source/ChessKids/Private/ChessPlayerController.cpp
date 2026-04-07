@@ -3,6 +3,8 @@
 #include "ChessManager.h"
 #include "ChessPiece.h"
 #include "Kismet/GameplayStatics.h"
+#include "Components/InputComponent.h"
+#include "TimerManager.h"
 
 AChessPlayerController::AChessPlayerController()
 {
