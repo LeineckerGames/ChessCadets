@@ -2,6 +2,8 @@
 #include "ChessBoard.h"
 #include "ChessPiece.h"
 #include "Async/Async.h"
+#include "Engine/World.h"
+#include "GameFramework/Actor.h"
 
 THIRD_PARTY_INCLUDES_START
 #include "position.h"
