@@ -98,6 +98,7 @@ AChessManager::AChessManager()
 void AChessManager::BeginPlay()
 {
 	Super::BeginPlay();
+	SetDifficulty(1);	
 	NewGame();
 	SpawnAllPieces();
 
@@ -205,6 +206,17 @@ void AChessManager::RequestAIMove()
 void AChessManager::StopSearch()
 {
 	if (Engine) Engine->Search.stop();
+}
+
+void AChessManager::SetDifficulty(int32 Level)
+{
+	switch (Level)
+	{
+	case 1:  AISearchDepth = 2; break;  // Easy
+	case 2:  AISearchDepth = 4; break;  // Medium
+	case 3:  AISearchDepth = 6; break;  // Hard
+	default: AISearchDepth = 4; break;  // Fallback Medium
+	}
 }
 
 FString AChessManager::GetFEN() const
