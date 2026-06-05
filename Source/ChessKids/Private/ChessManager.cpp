@@ -98,8 +98,9 @@ AChessManager::AChessManager()
 void AChessManager::BeginPlay()
 {
 	Super::BeginPlay();
-	SetDifficulty(1);	
+		
 	NewGame();
+	SetDifficulty(1);
 	SpawnAllPieces();
 
 	OnMoveMade.AddDynamic(this, &AChessManager::HandleMoveMade);
@@ -198,6 +199,29 @@ bool AChessManager::MakeMove(const FString& MoveStr)
 void AChessManager::RequestAIMove()
 {
 	if (!Engine) return;
+	UE_LOG(LogTemp, Warning, TEXT("AI thinking at depth %d"), AISearchDepth);
+	// At Easy difficulty, 50% chance of playing a random legal move
+	if (AISearchDepth == 1)
+	{
+		pulse::MoveGenerator Gen;
+		auto& LegalMoves = Gen.getLegalMoves(
+			Engine->Position, 1, Engine->Position.isCheck());
+
+		if (LegalMoves.size > 0)
+		{
+			// Pick a random move
+			int32 RandomIndex = FMath::RandRange(0, LegalMoves.size - 1);
+			int RandomMove = LegalMoves.entries[RandomIndex]->move;
+
+			// 50% chance use random move, 50% use engine
+			if (FMath::RandBool())
+			{
+				UE_LOG(LogTemp, Warning, TEXT("Easy mode: playing random move!"));
+				OnBestMoveFound(RandomMove);
+				return;
+			}
+		}
+	}
 
 	Engine->Search.newDepthSearch(Engine->Position, AISearchDepth);
 	Engine->Search.start();
@@ -212,11 +236,12 @@ void AChessManager::SetDifficulty(int32 Level)
 {
 	switch (Level)
 	{
-	case 1:  AISearchDepth = 2; break;  // Easy
-	case 2:  AISearchDepth = 4; break;  // Medium
-	case 3:  AISearchDepth = 6; break;  // Hard
-	default: AISearchDepth = 4; break;  // Fallback Medium
+	case 1:  AISearchDepth = 1; break;
+	case 2:  AISearchDepth = 3; break;
+	case 3:  AISearchDepth = 6; break;
+	default: AISearchDepth = 3; break;
 	}
+	UE_LOG(LogTemp, Warning, TEXT("Difficulty set! AISearchDepth = %d"), AISearchDepth);
 }
 
 FString AChessManager::GetFEN() const
