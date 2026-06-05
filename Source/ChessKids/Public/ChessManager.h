@@ -63,6 +63,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Chess")
 	void StopSearch();
 
+	UFUNCTION(BlueprintCallable, Category = "Chess")
+	void SetDifficulty(int32 Level);
+
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Chess")
 	FString GetFEN() const;
 
