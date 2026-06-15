@@ -119,6 +119,7 @@ void AChessManager::BeginDestroy()
 
 void AChessManager::NewGame()
 {
+	bGameOver = false;  
 	if (Engine)
 	{
 		Engine->Search.quit();
@@ -310,6 +311,7 @@ void AChessManager::OnBestMoveFound(int BestMove)
 void AChessManager::CheckGameOver()
 {
 	if (!Engine) return;
+	
 
 	pulse::MoveGenerator Gen;
 	auto& LegalMoves = Gen.getLegalMoves(
@@ -321,10 +323,12 @@ void AChessManager::CheckGameOver()
 		{
 			const FString Winner = Engine->Position.activeColor == pulse::color::WHITE
 				? TEXT("black") : TEXT("white");
+			bGameOver = true;
 			OnGameOver.Broadcast(Winner);
 		}
 		else
 		{
+			bGameOver = true;
 			OnGameOver.Broadcast(TEXT("draw"));
 		}
 		return;
