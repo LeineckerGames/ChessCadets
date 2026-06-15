@@ -84,6 +84,7 @@ public:
 private:
 	struct FEngineImpl;
 	FEngineImpl* Engine = nullptr;
+	bool bGameOver = false;
 
 	void OnBestMoveFound(int BestMove);
 
