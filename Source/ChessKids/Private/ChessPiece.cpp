@@ -1,6 +1,7 @@
 #include "ChessPiece.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Engine/StaticMesh.h"
 
 AChessPiece::AChessPiece()
 {

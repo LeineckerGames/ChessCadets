@@ -35,6 +35,10 @@ void AChessCamera::OnConstruction(const FTransform& Transform)
 void AChessCamera::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (!TargetBoard)
+		TargetBoard = Cast<AChessBoard>(UGameplayStatics::GetActorOfClass(this, AChessBoard::StaticClass()));
+
 	ApplyView();
 
 	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);

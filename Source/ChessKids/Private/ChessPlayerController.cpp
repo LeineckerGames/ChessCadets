@@ -3,6 +3,9 @@
 #include "ChessManager.h"
 #include "ChessPiece.h"
 #include "Kismet/GameplayStatics.h"
+#include "Components/InputComponent.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
 
 AChessPlayerController::AChessPlayerController()
 {
@@ -29,6 +32,16 @@ void AChessPlayerController::BeginPlay()
 		Board = Cast<AChessBoard>(UGameplayStatics::GetActorOfClass(this, AChessBoard::StaticClass()));
 	if (!Manager)
 		Manager = Cast<AChessManager>(UGameplayStatics::GetActorOfClass(this, AChessManager::StaticClass()));
+}
+
+void AChessPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// Clear the AI delay timer — without this it can fire on a freed controller
+	// during PIE-stop or level transitions.
+	if (UWorld* World = GetWorld())
+		World->GetTimerManager().ClearTimer(AITimerHandle);
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void AChessPlayerController::Tick(float DeltaTime)
@@ -133,10 +146,13 @@ void AChessPlayerController::OnSelect()
 		if (bSuccess)
 		{
 			bIsAIThinking = true;
-			GetWorldTimerManager().SetTimer(AITimerHandle, [this]()
+			TWeakObjectPtr<AChessPlayerController> WeakThis(this);
+			GetWorldTimerManager().SetTimer(AITimerHandle, [WeakThis]()
 			{
-				if (Manager) Manager->RequestAIMove();
-				bIsAIThinking = false;
+				AChessPlayerController* Self = WeakThis.Get();
+				if (!Self) return;
+				if (IsValid(Self->Manager)) Self->Manager->RequestAIMove();
+				Self->bIsAIThinking = false;
 			}, 0.5f, false);
 		}
 	}

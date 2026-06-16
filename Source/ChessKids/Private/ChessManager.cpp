@@ -2,6 +2,9 @@
 #include "ChessBoard.h"
 #include "ChessPiece.h"
 #include "Async/Async.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
+#include "Kismet/GameplayStatics.h"
 
 THIRD_PARTY_INCLUDES_START
 #include "position.h"
@@ -96,6 +99,10 @@ AChessManager::AChessManager()
 void AChessManager::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (!Board)
+		Board = Cast<AChessBoard>(UGameplayStatics::GetActorOfClass(this, AChessBoard::StaticClass()));
+
 	NewGame();
 	SpawnAllPieces();
 
@@ -119,16 +126,20 @@ void AChessManager::NewGame()
 	{
 		Engine->Search.quit();
 		delete Engine;
+		Engine = nullptr;
 	}
 
 	Engine = new FEngineImpl();
 
-	Engine->BestMoveCallback = [this](int BestMove)
+	// Capture a weak ptr — IsValid(this) is undefined behaviour once the actor is freed,
+	// because it dereferences `this` to read the object flags.
+	TWeakObjectPtr<AChessManager> WeakThis(this);
+	Engine->BestMoveCallback = [WeakThis](int BestMove)
 	{
-		AsyncTask(ENamedThreads::GameThread, [this, BestMove]()
+		AsyncTask(ENamedThreads::GameThread, [WeakThis, BestMove]()
 		{
-			if (!IsValid(this)) return;
-			OnBestMoveFound(BestMove);
+			if (AChessManager* Self = WeakThis.Get())
+				Self->OnBestMoveFound(BestMove);
 		});
 	};
 }
@@ -316,7 +327,7 @@ void AChessManager::SpawnAllPieces()
 			Pair.Value->Destroy();
 	PieceActors.Empty();
 
-	if (!Board) return;
+	if (!IsValid(Board)) return;
 
 	for (int32 Rank = 0; Rank < 8; ++Rank)
 	{
