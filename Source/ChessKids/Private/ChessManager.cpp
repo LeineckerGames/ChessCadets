@@ -311,6 +311,7 @@ void AChessManager::OnBestMoveFound(int BestMove)
 void AChessManager::CheckGameOver()
 {
 	if (!Engine) return;
+	if (bGameOver) return;
 	
 
 	pulse::MoveGenerator Gen;
@@ -335,7 +336,10 @@ void AChessManager::CheckGameOver()
 	}
 
 	if (Engine->Position.isRepetition() || Engine->Position.hasInsufficientMaterial())
+	{
+		bGameOver = true;
 		OnGameOver.Broadcast(TEXT("draw"));
+	}
 }
 
 EChessPieceType AChessManager::CharToPieceType(TCHAR C)
