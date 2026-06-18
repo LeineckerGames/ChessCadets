@@ -178,10 +178,49 @@ set. `WBP_LevelSelect` lists those entries; choosing one calls
 
 ## Working with the repository
 
-- `main` is the integrated baseline — branch your work off it and open a PR; **don't push
-  directly to `main`.**
-- Always have **Git LFS** installed before cloning/pulling, or the binary assets will be
-  broken pointers.
+`main` is the integrated baseline. **Branch off it, open a PR, and never push directly to
+`main`.** Always have **Git LFS** installed before cloning or pulling, or the binary
+assets will be broken pointers.
+
+### First time: clone
+
+```bash
+git lfs install                  # one-time per machine
+git clone https://github.com/LeineckerGames/ChessCadets.git
+cd ChessCadets
+git lfs pull                     # download the binary assets
+```
+
+### Create a new branch from `main`
+
+```bash
+git checkout main
+git pull origin main             # local main = the integrated remote
+git lfs pull
+git checkout -b <yourname>-work  # your branch off main
+# ...commit your work...
+git push -u origin <yourname>-work
+```
+
+### Recreate your branch from the new `main`
+
+To restart a stale branch from the current `main` (this **discards that branch's old
+commits**):
+
+```bash
+git fetch origin
+git checkout <yourbranch>
+git reset --hard origin/main
+git lfs pull
+git push --force-with-lease origin <yourbranch>
+```
+
+Prefer to leave the old branch untouched? Just make a fresh one off `main` instead:
+
+```bash
+git fetch origin
+git checkout -b <yourname>-new origin/main
+```
 
 ---
 
