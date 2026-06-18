@@ -29,8 +29,6 @@ computer actually searches for replies.
 - **Visual Studio 2022** with the *Game development with C++* workload.
 - **Git** and **[Git LFS](https://git-lfs.com/)** — all `.uasset`/`.umap` binaries are
   stored in LFS, so the repo is unusable without it.
-- **Python 3** is *optional* and only needed if you run the editor automation scripts in
-  `Scripts/` (they execute through Unreal's built‑in Python).
 
 ---
 
@@ -160,20 +158,6 @@ set. `WBP_LevelSelect` lists those entries; choosing one calls
    `AChessCamera`. References auto‑resolve at runtime, but you can set them explicitly.
 3. Add an `FChessMapEntry` to `DA_MapRegistry` (`MapId`, `DisplayName`, `Level`).
 4. If it should be packaged, add it to `MapsToCook` in `Config/DefaultEngine.ini`.
-
----
-
-## Editor automation (`Scripts/`)
-
-Run from the open editor via **Tools → Execute Python Script**:
-
-- **`build_chess_maps.py`** — (re)writes `DA_MapRegistry` to the five entries
-  (Pawn/Knight/Bishop/Rook/Royalty) and creates the five `L_<Piece>` levels, each
-  pre‑wired with a board + manager + camera, lighting, and a floor. Idempotent; skips
-  levels that already exist. Pieces are spawned at runtime, not saved into the level.
-- **`decorate_maps.py`** — dresses the five arenas with the cyberpunk look: dark wall
-  rings/towers/columns, emissive neon trim and floor outlines, pylons and colored point
-  lights (one accent color per piece). Run *after* `build_chess_maps.py`.
 
 ---
 

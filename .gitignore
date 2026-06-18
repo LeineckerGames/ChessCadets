@@ -57,8 +57,5 @@ _local/
 .mcp.json
 /Plugins/UnrealMCP/
 
-# --- One-off diagnostic / repair scripts (kept locally, not committed) ---
-/Scripts/board_diag.py
-/Scripts/board_diag.txt
-/Scripts/fix_boards.py
-/Scripts/fix_board_materials.py
+# --- Editor automation & diagnostic scripts — local-only, never committed ---
+/Scripts/
