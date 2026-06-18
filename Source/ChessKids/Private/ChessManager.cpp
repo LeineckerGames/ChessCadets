@@ -3,7 +3,7 @@
 #include "ChessPiece.h"
 #include "Async/Async.h"
 #include "Engine/World.h"
-#include "TimerManager.h"
+#include "GameFramework/Actor.h"
 #include "Kismet/GameplayStatics.h"
 
 THIRD_PARTY_INCLUDES_START
@@ -99,11 +99,13 @@ AChessManager::AChessManager()
 void AChessManager::BeginPlay()
 {
 	Super::BeginPlay();
+		
+	NewGame();
+	SetDifficulty(1);
 
 	if (!Board)
 		Board = Cast<AChessBoard>(UGameplayStatics::GetActorOfClass(this, AChessBoard::StaticClass()));
 
-	NewGame();
 	SpawnAllPieces();
 
 	OnMoveMade.AddDynamic(this, &AChessManager::HandleMoveMade);
@@ -122,6 +124,7 @@ void AChessManager::BeginDestroy()
 
 void AChessManager::NewGame()
 {
+	bGameOver = false;  
 	if (Engine)
 	{
 		Engine->Search.quit();
@@ -206,6 +209,29 @@ bool AChessManager::MakeMove(const FString& MoveStr)
 void AChessManager::RequestAIMove()
 {
 	if (!Engine) return;
+	UE_LOG(LogTemp, Warning, TEXT("AI thinking at depth %d"), AISearchDepth);
+	// At Easy difficulty, 50% chance of playing a random legal move
+	if (AISearchDepth == 1)
+	{
+		pulse::MoveGenerator Gen;
+		auto& LegalMoves = Gen.getLegalMoves(
+			Engine->Position, 1, Engine->Position.isCheck());
+
+		if (LegalMoves.size > 0)
+		{
+			// Pick a random move
+			int32 RandomIndex = FMath::RandRange(0, LegalMoves.size - 1);
+			int RandomMove = LegalMoves.entries[RandomIndex]->move;
+
+			// 50% chance use random move, 50% use engine
+			if (FMath::RandBool())
+			{
+				UE_LOG(LogTemp, Warning, TEXT("Easy mode: playing random move!"));
+				OnBestMoveFound(RandomMove);
+				return;
+			}
+		}
+	}
 
 	Engine->Search.newDepthSearch(Engine->Position, AISearchDepth);
 	Engine->Search.start();
@@ -214,6 +240,18 @@ void AChessManager::RequestAIMove()
 void AChessManager::StopSearch()
 {
 	if (Engine) Engine->Search.stop();
+}
+
+void AChessManager::SetDifficulty(int32 Level)
+{
+	switch (Level)
+	{
+	case 1:  AISearchDepth = 1; break;
+	case 2:  AISearchDepth = 3; break;
+	case 3:  AISearchDepth = 6; break;
+	default: AISearchDepth = 3; break;
+	}
+	UE_LOG(LogTemp, Warning, TEXT("Difficulty set! AISearchDepth = %d"), AISearchDepth);
 }
 
 FString AChessManager::GetFEN() const
@@ -282,6 +320,8 @@ void AChessManager::OnBestMoveFound(int BestMove)
 void AChessManager::CheckGameOver()
 {
 	if (!Engine) return;
+	if (bGameOver) return;
+	
 
 	pulse::MoveGenerator Gen;
 	auto& LegalMoves = Gen.getLegalMoves(
@@ -293,17 +333,22 @@ void AChessManager::CheckGameOver()
 		{
 			const FString Winner = Engine->Position.activeColor == pulse::color::WHITE
 				? TEXT("black") : TEXT("white");
+			bGameOver = true;
 			OnGameOver.Broadcast(Winner);
 		}
 		else
 		{
+			bGameOver = true;
 			OnGameOver.Broadcast(TEXT("draw"));
 		}
 		return;
 	}
 
 	if (Engine->Position.isRepetition() || Engine->Position.hasInsufficientMaterial())
+	{
+		bGameOver = true;
 		OnGameOver.Broadcast(TEXT("draw"));
+	}
 }
 
 EChessPieceType AChessManager::CharToPieceType(TCHAR C)
