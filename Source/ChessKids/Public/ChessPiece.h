@@ -2,7 +2,9 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Engine/SkeletalMesh.h"
 #include "ChessPiece.generated.h"
+
 
 UENUM(BlueprintType)
 enum class EChessPieceType : uint8
@@ -31,7 +33,7 @@ struct FPieceMeshConfig
 	TSubclassOf<AActor> PieceClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	UStaticMesh* Mesh = nullptr;
+	USkeletalMesh* Mesh = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FVector Scale = FVector(1.f, 1.f, 1.f);
@@ -66,7 +68,7 @@ public:
 	void Init(EChessPieceType Type, EChessColor Color, int32 File, int32 Rank, const FPieceMeshConfig* MeshOverride = nullptr);
 
 	UPROPERTY(VisibleAnywhere)
-	UStaticMeshComponent* MeshComp = nullptr;
+	USkeletalMeshComponent* MeshComp = nullptr;
 
 private:
 	void SetupMeshAndMaterial(const FPieceMeshConfig* MeshOverride);
