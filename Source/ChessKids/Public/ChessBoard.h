@@ -9,6 +9,21 @@ class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UPointLightComponent;
 
+USTRUCT(BlueprintType)
+struct FBoardTheme
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Theme")
+	FName DisplayName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Theme")
+	UMaterialInterface* LightSquareMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Theme")
+	UMaterialInterface* DarkSquareMaterial = nullptr;
+};
+
 UCLASS()
 class CHESSKIDS_API AChessBoard : public AActor
 {
@@ -38,6 +53,14 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Board")
 	UMaterialInterface* HoverMaterial = nullptr;
+
+	// Board color themes — drives the in-game slider.
+	// Populate this on the AChessBoard placed in the level. Index 0 = default theme.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Themes")
+	TArray<FBoardTheme> BoardThemes;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Themes", meta = (ClampMin = "0"))
+	int32 CurrentThemeIndex = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Board")
 	float HighlightZOffset = 2.f;
@@ -150,6 +173,24 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category="Chess|Snap")
 	void SnapActorToSquare(AActor* ActorToSnap, int32 File, int32 Rank, float ZOffset = 0.f,bool bSnapRot = false, FRotator Rot = FRotator::ZeroRotator);
+
+	// Theme API — used by the in-game color slider.
+	// Swaps square materials in place; does not rebuild board geometry.
+	UFUNCTION(BlueprintCallable, Category = "Chess|Themes")
+	void SetBoardTheme(int32 ThemeIndex);
+
+	// Convenience for UMG sliders: maps a 0..1 value to a theme index.
+	UFUNCTION(BlueprintCallable, Category = "Chess|Themes")
+	void SetBoardThemeBySliderValue(float Value);
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Chess|Themes")
+	int32 GetNumBoardThemes() const { return BoardThemes.Num(); }
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Chess|Themes")
+	int32 GetCurrentThemeIndex() const { return CurrentThemeIndex; }
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Chess|Themes")
+	FName GetCurrentThemeName() const;
 
 private:
 	UPROPERTY() TArray<UStaticMeshComponent*> SquareMeshes;

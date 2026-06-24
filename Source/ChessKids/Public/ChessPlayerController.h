@@ -17,6 +17,7 @@ class CHESSKIDS_API AChessPlayerController : public APlayerController
 public:
 	AChessPlayerController();
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupInputComponent() override;
 

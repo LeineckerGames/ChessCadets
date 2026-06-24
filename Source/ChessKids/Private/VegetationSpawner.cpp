@@ -61,14 +61,20 @@ void AVegetationSpawner::SpawnMeshes()
 			FActorSpawnParameters Params;
 			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-			AStaticMeshActor* NewActor = World->SpawnActor<AStaticMeshActor>(
-				AStaticMeshActor::StaticClass(), SpawnLocation, SpawnRotation, Params);
+			const FVector FinalLocation = SpawnLocation + FVector(0.f, 0.f, ZOffset);
+			UClass* SpawnClass = SpawnActorClassOverride ? SpawnActorClassOverride.Get() : AStaticMeshActor::StaticClass();
+			AActor* NewActor = World->SpawnActor<AActor>(SpawnClass, FinalLocation, SpawnRotation, Params);
 
 			if (NewActor)
 			{
-				NewActor->GetStaticMeshComponent()->SetStaticMesh(LoadedMesh);
+				if (UStaticMeshComponent* SMC = NewActor->FindComponentByClass<UStaticMeshComponent>())
+				{
+					SMC->SetStaticMesh(LoadedMesh);
+					// Vegetation stays static; an overridden (moving) actor keeps its own mobility.
+					if (!SpawnActorClassOverride)
+						SMC->SetMobility(EComponentMobility::Static);
+				}
 				NewActor->SetActorScale3D(FVector(Scale));
-				NewActor->GetStaticMeshComponent()->SetMobility(EComponentMobility::Static);
 				SpawnedActors.Add(NewActor);
 				Placed++;
 			}

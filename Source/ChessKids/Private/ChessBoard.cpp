@@ -21,6 +21,10 @@ void AChessBoard::OnConstruction(const FTransform& Transform)
 	BuildHolographicFrame();
 	RebuildNeonDMIs();
 	//SnapModelToBoard();
+
+	// Apply currently selected theme (no-op when BoardThemes is empty)
+	if (BoardThemes.IsValidIndex(CurrentThemeIndex))
+		SetBoardTheme(CurrentThemeIndex);
 }
 
 void AChessBoard::BeginPlay()
@@ -99,6 +103,7 @@ void AChessBoard::BuildBoard()
 				PlaneMesh, GetRootComponent(), LocalPos,
 				FVector(Scale, Scale, 1.f),
 				bLight ? LightSquareMaterial : DarkSquareMaterial);
+			SquareMeshes.Add(Sq); // register square so SetBoardTheme() can re-skin it in place
 			Sq->SetCollisionEnabled(ECollisionEnabled::QueryOnly); // ← only square meshes get collision
 
 			UStaticMeshComponent* Hl = MakeMeshComp(
@@ -309,6 +314,51 @@ void AChessBoard::SnapActorToSquare(AActor* ActorToSnap, int32 File, int32 Rank,
     /*UE_LOG(LogTemp, Warning, TEXT("Snap %s: (%d,%d,%.1f) Before=%s After=%s Target=%s"),
         *GetNameSafe(ActorToSnap), File, Rank, ZOffset,
         *Before.ToString(), *After.ToString(), *Target.ToString());*/
+}
+
+// Themes
+
+void AChessBoard::SetBoardTheme(int32 ThemeIndex)
+{
+	if (!BoardThemes.IsValidIndex(ThemeIndex)) return;
+
+	const FBoardTheme& Theme = BoardThemes[ThemeIndex];
+	CurrentThemeIndex = ThemeIndex;
+
+	// Mirror onto the canonical properties so existing logic (selection clear, etc.) stays consistent.
+	if (Theme.LightSquareMaterial) LightSquareMaterial = Theme.LightSquareMaterial;
+	if (Theme.DarkSquareMaterial)  DarkSquareMaterial  = Theme.DarkSquareMaterial;
+
+	// Re-skin existing square meshes in place — avoids rebuilding the board (which would
+	// drop highlights, holographic frame DMIs, and any snapped pieces).
+	for (int32 Idx = 0; Idx < SquareMeshes.Num(); ++Idx)
+	{
+		UStaticMeshComponent* Sq = SquareMeshes[Idx];
+		if (!IsValid(Sq)) continue;
+
+		const int32 File = Idx % 8;
+		const int32 Rank = Idx / 8;
+		const bool bLight = ((File + Rank) % 2 != 0);
+		UMaterialInterface* Mat = bLight ? Theme.LightSquareMaterial : Theme.DarkSquareMaterial;
+		if (Mat) Sq->SetMaterial(0, Mat);
+	}
+}
+
+void AChessBoard::SetBoardThemeBySliderValue(float Value)
+{
+	const int32 N = BoardThemes.Num();
+	if (N <= 0) return;
+
+	const float Clamped = FMath::Clamp(Value, 0.f, 1.f);
+	const int32 Idx = FMath::Clamp(FMath::RoundToInt(Clamped * (N - 1)), 0, N - 1);
+	SetBoardTheme(Idx);
+}
+
+FName AChessBoard::GetCurrentThemeName() const
+{
+	return BoardThemes.IsValidIndex(CurrentThemeIndex)
+		? BoardThemes[CurrentThemeIndex].DisplayName
+		: NAME_None;
 }
 
 void AChessBoard::HoverSquare(const FString& SquareStr)

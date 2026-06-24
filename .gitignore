@@ -25,6 +25,12 @@ env/
 pip-log.txt
 pip-delete-this-directory.txt
 
+# --- Xcode ---
+*.xcworkspace/
+*.xcodeproj/
+*.xcuserstate
+xcuserdata/
+
 # --- Unreal Engine ---
 Saved/
 Intermediate/
@@ -37,6 +43,19 @@ PackagingResults/
 .DS_Store
 Thumbs.db
 
+# --- Claude ---
+.claude/
+
 # --- Misc ---
 *.log
 *.tmp
+
+# --- Local-only (presentations, notes, scratch) — never committed ---
+_local/
+
+# --- MCP / local automation tooling (machine-specific, not committed) ---
+.mcp.json
+/Plugins/UnrealMCP/
+
+# --- Editor automation & diagnostic scripts — local-only, never committed ---
+/Scripts/

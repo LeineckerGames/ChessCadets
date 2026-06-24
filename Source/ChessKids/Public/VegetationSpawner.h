@@ -57,6 +57,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Vegetation Spawner", meta = (ClampMin = "1", ClampMax = "20"))
 	int32 MaxPlacementAttempts = 10;
 
+	// Optional: spawn this actor class (e.g. a moving hover-car BP) instead of a plain
+	// static mesh actor. The spawner sets the random mesh on its StaticMeshComponent and
+	// leaves its mobility/movement intact so it can move. Null = classic static vegetation.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Vegetation Spawner")
+	TSubclassOf<AActor> SpawnActorClassOverride;
+
+	// Vertical offset added to each spawned actor (lets hover-cars float above the ground).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Vegetation Spawner")
+	float ZOffset = 0.f;
+
 	UFUNCTION(CallInEditor, Category = "Vegetation Spawner")
 	void SpawnMeshes();
 
