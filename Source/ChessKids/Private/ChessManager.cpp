@@ -148,7 +148,10 @@ void AChessManager::SetPositionFromFEN(const FString& FEN)
 
 bool AChessManager::MakeMove(const FString& MoveStr)
 {
+	
 	if (!Engine) return false;
+	// Push BEFORE the move so we can restore to this state
+	FENHistory.Push(GetFEN());
 
 	if (MoveStr.Len() < 4) return false;
 
@@ -233,6 +236,24 @@ void AChessManager::StopSearch()
 	if (Engine) Engine->Search.stop();
 }
 
+void AChessManager::UndoLastMove()
+{
+	// Need at least 2 snapshots: player's move + AI's move
+	if (FENHistory.Num() < 2) return;
+
+	FENHistory.Pop(); // remove AI move snapshot
+	FENHistory.Pop(); // remove player move snapshot
+
+	// Restore to the FEN now on top (before player moved)
+	FString RestoredFEN = FENHistory.Num() > 0
+		? FENHistory.Last()
+		: TEXT("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+
+	SetPositionFromFEN(RestoredFEN);
+	SpawnAllPieces();   // re-sync the 3D pieces to match the restored position
+	bGameOver = false;  // in case undo happens after checkmate detection
+}
+
 void AChessManager::SetDifficulty(int32 Level)
 {
 	switch (Level)
@@ -301,6 +322,9 @@ void AChessManager::OnBestMoveFound(int BestMove)
 	const FString From = SquareToString(pulse::move::getOriginSquare(BestMove));
 	const FString To   = SquareToString(pulse::move::getTargetSquare(BestMove));
 
+	
+	FENHistory.Push(GetFEN());
+	
 	Engine->Position.makeMove(BestMove);
 	OnMoveMade.Broadcast(From, To);
 	OnAIMoveReady.Broadcast(From, To);
