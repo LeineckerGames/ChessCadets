@@ -21,11 +21,23 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupInputComponent() override;
 
+	UFUNCTION(BlueprintCallable, Category = "Chess")
+	void CompletePromotion(const FString& PieceLetter); 
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess")
 	AChessBoard* Board = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess")
 	AChessManager* Manager = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|UI")
+	TSubclassOf<UUserWidget> PromotionPickerClass;
+
+	UPROPERTY()
+	UUserWidget* PromotionPickerWidget = nullptr;
+
+	UFUNCTION(BlueprintCallable, Category = "Chess")
+	void ResetTurnState();
 
 private:
 	//Actions
@@ -39,6 +51,8 @@ private:
 	FString HoveredSquare;
 	bool bPieceSelected = false;
 	bool bIsAIThinking = false;
+	FString PendingMoveStr;         
+	bool bAwaitingPromotion = false;  
 	FTimerHandle AITimerHandle;   
 
 
