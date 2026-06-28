@@ -84,6 +84,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Chess")
 	void UndoLastMove();
 
+	UFUNCTION(BlueprintCallable, Category = "Chess")
+	void RefreshBoard() { SpawnAllPieces(); }
+
+	UFUNCTION(BlueprintCallable, Category = "Chess")
+	void SwapPromotedPiece(const FString& Square, const FString& PieceLetter);  
+
 private:
 	struct FEngineImpl;
 	FEngineImpl* Engine = nullptr;
