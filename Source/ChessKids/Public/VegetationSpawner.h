@@ -9,6 +9,8 @@
 #include "Engine/StaticMesh.h"
 #include "VegetationSpawner.generated.h"
 
+class UHierarchicalInstancedStaticMeshComponent;
+
 USTRUCT(BlueprintType)
 struct FVegetationEntry
 {
@@ -76,6 +78,10 @@ public:
 private:
 	UPROPERTY()
 	TArray<AActor*> SpawnedActors;
+
+	// One instanced-mesh component per static-vegetation entry (batched draw calls).
+	UPROPERTY()
+	TArray<UHierarchicalInstancedStaticMeshComponent*> SpawnedHISMs;
 
 	bool TryGetGroundLocation(const FVector& Origin, float Radius, FVector& OutLocation, FRotator& OutRotation) const;
 };
