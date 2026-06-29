@@ -81,10 +81,20 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Chess")
 	FString GetPieceOnSquare(const FString& SquareStr) const;
 
+	UFUNCTION(BlueprintCallable, Category = "Chess")
+	void UndoLastMove();
+
+	UFUNCTION(BlueprintCallable, Category = "Chess")
+	void RefreshBoard() { SpawnAllPieces(); }
+
+	UFUNCTION(BlueprintCallable, Category = "Chess")
+	void SwapPromotedPiece(const FString& Square, const FString& PieceLetter);  
+
 private:
 	struct FEngineImpl;
 	FEngineImpl* Engine = nullptr;
 	bool bGameOver = false;
+	TArray<FString>FENHistory;
 
 	void OnBestMoveFound(int BestMove);
 

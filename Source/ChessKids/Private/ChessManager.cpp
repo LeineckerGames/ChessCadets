@@ -102,10 +102,8 @@ void AChessManager::BeginPlay()
 		
 	NewGame();
 	SetDifficulty(1);
-
 	if (!Board)
 		Board = Cast<AChessBoard>(UGameplayStatics::GetActorOfClass(this, AChessBoard::StaticClass()));
-
 	SpawnAllPieces();
 
 	OnMoveMade.AddDynamic(this, &AChessManager::HandleMoveMade);
@@ -157,7 +155,10 @@ void AChessManager::SetPositionFromFEN(const FString& FEN)
 
 bool AChessManager::MakeMove(const FString& MoveStr)
 {
+	
 	if (!Engine) return false;
+	// Push BEFORE the move so we can restore to this state
+	FENHistory.Push(GetFEN());
 
 	if (MoveStr.Len() < 4) return false;
 
@@ -242,6 +243,92 @@ void AChessManager::StopSearch()
 	if (Engine) Engine->Search.stop();
 }
 
+void AChessManager::UndoLastMove()
+{
+
+	// Stop any pending AI search
+	if (Engine) Engine->Search.stop();
+
+	// Need at least 2 snapshots: player's move + AI's move
+	if (FENHistory.Num() < 2) return;
+
+	FENHistory.Pop(); // remove AI move snapshot
+	FENHistory.Pop(); // remove player move snapshot
+
+	// Restore to the FEN now on top (before player moved)
+	FString RestoredFEN = FENHistory.Num() > 0
+		? FENHistory.Last()
+		: TEXT("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+
+	SetPositionFromFEN(RestoredFEN);
+	SpawnAllPieces();   // re-sync the 3D pieces to match the restored position
+	bGameOver = false;  // in case undo happens after checkmate detection
+}
+
+void AChessManager::SwapPromotedPiece(const FString& Square, const FString& PieceLetter)
+{
+	if (!Board) return;
+
+	// Find and destroy the current piece on that square (the queen placeholder)
+	AChessPiece* ExistingPiece = FindPieceOnSquare(Square);
+	if (ExistingPiece)
+	{
+		ExistingPiece->Destroy();
+		PieceActors.Remove(Square);
+	}
+
+	// Determine color and type from the piece letter
+	// Lowercase = black, uppercase = white
+	TCHAR C = PieceLetter[0];
+	EChessColor Color = FChar::IsUpper(C) ? EChessColor::White : EChessColor::Black;
+	EChessPieceType Type = CharToPieceType(C);
+
+	// Get file and rank from square string e.g. "e8"
+	int32 File = Square[0] - 'a';
+	int32 Rank = Square[1] - '1';
+
+	// Get the right mesh config
+	const TMap<EChessPieceType, FPieceMeshConfig>& MeshMap =
+		(Color == EChessColor::White) ? WhitePieceMeshes : BlackPieceMeshes;
+	const FPieceMeshConfig* Override = MeshMap.Find(Type);
+
+	// Spawn the new piece
+	FVector SpawnLoc = Board->FileRankToWorldLocation(File, Rank, 0.f);
+	FRotator SpawnRot = FRotator::ZeroRotator;
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AChessPiece* NewPiece = nullptr;
+	if (Override && Override->PieceClass)
+	{
+		AActor* Spawned = GetWorld()->SpawnActor(Override->PieceClass.Get(), &SpawnLoc, &SpawnRot, Params);
+		NewPiece = Cast<AChessPiece>(Spawned);
+	}
+	else
+	{
+		NewPiece = GetWorld()->SpawnActor<AChessPiece>(SpawnLoc, SpawnRot, Params);
+	}
+
+	if (NewPiece)
+	{
+		if (Override && Override->PieceClass)
+		{
+			NewPiece->PieceType = Type;
+			NewPiece->PieceColor = Color;
+			NewPiece->BoardFile = File;
+			NewPiece->BoardRank = Rank;
+			NewPiece->SetActorScale3D(Override->Scale);
+		}
+		else
+		{
+			NewPiece->Init(Type, Color, File, Rank, Override);
+		}
+		float ZOff = (Override && Override->PieceClass) ? Override->ZOffset : 0.f;
+		Board->SnapActorToSquare(NewPiece, File, Rank, ZOff);
+		PieceActors.Add(Square, NewPiece);
+	}
+}
+
 void AChessManager::SetDifficulty(int32 Level)
 {
 	switch (Level)
@@ -310,6 +397,9 @@ void AChessManager::OnBestMoveFound(int BestMove)
 	const FString From = SquareToString(pulse::move::getOriginSquare(BestMove));
 	const FString To   = SquareToString(pulse::move::getTargetSquare(BestMove));
 
+	
+	FENHistory.Push(GetFEN());
+	
 	Engine->Position.makeMove(BestMove);
 	OnMoveMade.Broadcast(From, To);
 	OnAIMoveReady.Broadcast(From, To);

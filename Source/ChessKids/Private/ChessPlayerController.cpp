@@ -150,8 +150,33 @@ void AChessPlayerController::OnSelect()
 		}
 
 		FString MoveStr = SelectedSquare + ClickedSquare;
-		bool bSuccess = Manager->MakeMove(MoveStr);
 		bPieceSelected = false;
+
+		// Check promotion for both white and black
+		FString PromoPieceStr = Manager->GetPieceOnSquare(SelectedSquare);
+		bool bIsWhitePromotion = (PromoPieceStr == TEXT("P") && ClickedSquare[1] == '8');
+		bool bIsBlackPromotion = (PromoPieceStr == TEXT("p") && ClickedSquare[1] == '1');
+
+		if (bIsWhitePromotion || bIsBlackPromotion)
+		{
+			PendingMoveStr = MoveStr;
+			bAwaitingPromotion = true;
+
+			// Don't call MakeMove yet — wait for user choice
+			if (PromotionPickerClass)
+			{
+				PromotionPickerWidget = CreateWidget<UUserWidget>(this, PromotionPickerClass);
+				if (PromotionPickerWidget)
+				{
+					PromotionPickerWidget->AddToViewport();
+					FInputModeUIOnly UIMode;
+					SetInputMode(UIMode);
+				}
+			}
+			return;
+		}
+		bool bSuccess = Manager->MakeMove(MoveStr);
+		//bPieceSelected = false;
 
 		if (bSuccess)
 		{
@@ -239,4 +264,57 @@ void AChessPlayerController::QuitToMainMenu()
 {
 	UGameplayStatics::SetGamePaused(this, false);
 	UGameplayStatics::OpenLevel(this, MainMenuMapName);
+}
+
+// ---------------------------------------------------------------------------
+// Promotion (from main)
+// ---------------------------------------------------------------------------
+
+void AChessPlayerController::CompletePromotion(const FString& PieceLetter)
+{
+	if (!bAwaitingPromotion) return;
+	bAwaitingPromotion = false;
+
+	if (PromotionPickerWidget)
+	{
+		PromotionPickerWidget->RemoveFromParent();
+		PromotionPickerWidget = nullptr;
+		FInputModeGameAndUI Mode;
+		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		Mode.SetHideCursorDuringCapture(false);
+		SetInputMode(Mode);
+	}
+
+	// Make the move with the correct promotion piece
+	FString MoveStr = PendingMoveStr + PieceLetter; // e.g. "e7e8n"
+	bool bSuccess = Manager->MakeMove(MoveStr);
+	UE_LOG(LogTemp, Warning, TEXT("Promotion MakeMove result: %s, Move: %s"),
+		bSuccess ? TEXT("SUCCESS") : TEXT("FAILED"), *MoveStr);
+
+	if (bSuccess)
+	{
+		Manager->RefreshBoard();
+		bIsAIThinking = true;
+		TWeakObjectPtr<AChessPlayerController> WeakThis(this);
+		GetWorldTimerManager().SetTimer(AITimerHandle, [WeakThis]()
+			{
+				AChessPlayerController* Self = WeakThis.Get();
+				if (!Self) return;
+				if (IsValid(Self->Manager)) Self->Manager->RequestAIMove();
+				Self->bIsAIThinking = false;
+			}, 0.5f, false);
+	}
+}
+
+void AChessPlayerController::ResetTurnState()
+{
+	UE_LOG(LogTemp, Warning, TEXT("ResetTurnState called!"));
+	bIsAIThinking = false;
+	bAwaitingPromotion = false;
+	bPieceSelected = false;
+	if (PromotionPickerWidget)
+	{
+		PromotionPickerWidget->RemoveFromParent();
+		PromotionPickerWidget = nullptr;
+	}
 }

@@ -14,7 +14,7 @@ public class ChessKids : ModuleRules
 		// Pulse chess engine — embedded source
 		PrivateIncludePaths.Add(Path.Combine(ModuleDirectory, "Engine"));
 
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "UMG", "Slate", "SlateCore" });
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "UMG", "Slate", "SlateCore" });
+        PrivateDependencyModuleNames.AddRange(new string[] { });
 	}
 }
