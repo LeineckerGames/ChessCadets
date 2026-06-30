@@ -4,6 +4,7 @@
 #include "Engine/World.h"
 #include "Engine/StaticMeshActor.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/HierarchicalInstancedStaticMeshComponent.h"
 
 AVegetationSpawner::AVegetationSpawner()
 {
@@ -24,6 +25,15 @@ void AVegetationSpawner::SpawnMeshes()
 	// Clear any previously spawned meshes first
 	ClearSpawnedMeshes();
 
+	// Make sure there's a root to attach instanced-mesh components to.
+	USceneComponent* Root = GetRootComponent();
+	if (!Root)
+	{
+		Root = NewObject<USceneComponent>(this, TEXT("SpawnerRoot"));
+		Root->RegisterComponent();
+		SetRootComponent(Root);
+	}
+
 	const FVector ActorOrigin = GetActorLocation();
 	const FVector BoardCentre = FVector::ZeroVector; // chess board is at world origin
 
@@ -31,6 +41,20 @@ void AVegetationSpawner::SpawnMeshes()
 	{
 		UStaticMesh* LoadedMesh = Entry.Mesh.LoadSynchronous();
 		if (!LoadedMesh) continue;
+
+		// Static vegetation is batched into one HISM per entry (a single draw call
+		// instead of up to 500 individual actors). An actor override (e.g. a moving
+		// hover-car BP) still spawns real actors so they can keep moving.
+		UHierarchicalInstancedStaticMeshComponent* HISM = nullptr;
+		if (!SpawnActorClassOverride)
+		{
+			HISM = NewObject<UHierarchicalInstancedStaticMeshComponent>(this);
+			HISM->SetStaticMesh(LoadedMesh);
+			HISM->SetMobility(EComponentMobility::Static);
+			HISM->SetupAttachment(Root);
+			HISM->RegisterComponent();
+			SpawnedHISMs.Add(HISM);
+		}
 
 		int32 Placed = 0;
 		int32 TotalAttempts = 0;
@@ -47,36 +71,34 @@ void AVegetationSpawner::SpawnMeshes()
 				continue;
 
 			// Skip if inside the chess board exclusion zone
-			const float DistToBoard = FVector::Dist2D(SpawnLocation, BoardCentre);
-			if (DistToBoard < ExclusionRadius)
+			if (FVector::Dist2D(SpawnLocation, BoardCentre) < ExclusionRadius)
 				continue;
 
-			// Random yaw
 			if (bRandomYaw)
 				SpawnRotation.Yaw = FMath::RandRange(0.f, 360.f);
 
-			// Random scale
 			const float Scale = FMath::RandRange(Entry.ScaleMin, Entry.ScaleMax);
-
-			FActorSpawnParameters Params;
-			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
 			const FVector FinalLocation = SpawnLocation + FVector(0.f, 0.f, ZOffset);
-			UClass* SpawnClass = SpawnActorClassOverride ? SpawnActorClassOverride.Get() : AStaticMeshActor::StaticClass();
-			AActor* NewActor = World->SpawnActor<AActor>(SpawnClass, FinalLocation, SpawnRotation, Params);
 
-			if (NewActor)
+			if (HISM)
 			{
-				if (UStaticMeshComponent* SMC = NewActor->FindComponentByClass<UStaticMeshComponent>())
-				{
-					SMC->SetStaticMesh(LoadedMesh);
-					// Vegetation stays static; an overridden (moving) actor keeps its own mobility.
-					if (!SpawnActorClassOverride)
-						SMC->SetMobility(EComponentMobility::Static);
-				}
-				NewActor->SetActorScale3D(FVector(Scale));
-				SpawnedActors.Add(NewActor);
+				// World-space instance — fast, batched, no per-mesh actor overhead.
+				HISM->AddInstance(FTransform(SpawnRotation, FinalLocation, FVector(Scale)), /*bWorldSpace=*/true);
 				Placed++;
+			}
+			else
+			{
+				FActorSpawnParameters Params;
+				Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+				AActor* NewActor = World->SpawnActor<AActor>(SpawnActorClassOverride.Get(), FinalLocation, SpawnRotation, Params);
+				if (NewActor)
+				{
+					if (UStaticMeshComponent* SMC = NewActor->FindComponentByClass<UStaticMeshComponent>())
+						SMC->SetStaticMesh(LoadedMesh);
+					NewActor->SetActorScale3D(FVector(Scale));
+					SpawnedActors.Add(NewActor);
+					Placed++;
+				}
 			}
 		}
 	}
@@ -90,6 +112,16 @@ void AVegetationSpawner::ClearSpawnedMeshes()
 			Actor->Destroy();
 	}
 	SpawnedActors.Empty();
+
+	for (UHierarchicalInstancedStaticMeshComponent* HISM : SpawnedHISMs)
+	{
+		if (IsValid(HISM))
+		{
+			HISM->ClearInstances();
+			HISM->DestroyComponent();
+		}
+	}
+	SpawnedHISMs.Empty();
 }
 
 bool AVegetationSpawner::TryGetGroundLocation(const FVector& Origin, float Radius, FVector& OutLocation, FRotator& OutRotation) const

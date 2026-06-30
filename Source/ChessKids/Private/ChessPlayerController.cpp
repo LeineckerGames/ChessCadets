@@ -7,6 +7,8 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "Blueprint/UserWidget.h"
+#include "PauseMenuWidget.h"
+
 AChessPlayerController::AChessPlayerController()
 {
 	bShowMouseCursor = true;
@@ -54,6 +56,13 @@ void AChessPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
 	InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AChessPlayerController::OnSelect);
+
+	// Escape toggles pause. In PIE the editor eats Escape to stop play, so P is a
+	// second pause key that works in PIE and as a player alternative.
+	FInputKeyBinding& EscBinding = InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AChessPlayerController::TogglePause);
+	EscBinding.bExecuteWhenPaused = true;
+	FInputKeyBinding& PBinding = InputComponent->BindKey(EKeys::P, IE_Pressed, this, &AChessPlayerController::TogglePause);
+	PBinding.bExecuteWhenPaused = true;
 }
 
 void AChessPlayerController::HandleHover()
@@ -105,6 +114,7 @@ void AChessPlayerController::OnDeselect()
 
 void AChessPlayerController::OnSelect()
 {
+	if (bPaused) return;   // ignore board clicks while the pause menu is up
 	if (!Board || !Manager || bIsAIThinking) return;
 	if (Manager->GetActiveColor() != TEXT("white")) return;
 
@@ -182,6 +192,83 @@ void AChessPlayerController::OnSelect()
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Pause menu
+// ---------------------------------------------------------------------------
+
+void AChessPlayerController::TogglePause()
+{
+	if (bPaused)
+		ResumeGame();
+	else
+		ShowPauseMenu();
+}
+
+void AChessPlayerController::ShowPauseMenu()
+{
+	if (bPaused) return;
+
+	if (!PauseMenuInstance)
+	{
+		UClass* MenuClass = PauseMenuClass.LoadSynchronous();
+		if (!MenuClass) MenuClass = UPauseMenuWidget::StaticClass();   // C++ fallback UI
+		PauseMenuInstance = CreateWidget<UUserWidget>(this, MenuClass);
+	}
+	if (!PauseMenuInstance) return;
+
+	if (!PauseMenuInstance->IsInViewport())
+		PauseMenuInstance->AddToViewport(50);
+
+	UGameplayStatics::SetGamePaused(this, true);
+	bPaused = true;
+	bShowMouseCursor = true;
+
+	// Modal: UI-only input so clicks can't fall through to the chessboard behind the
+	// menu (which is what made the game react / "unpause" when clicking buttons).
+	PauseMenuInstance->SetIsFocusable(true);
+	FInputModeUIOnly Mode;
+	Mode.SetWidgetToFocus(PauseMenuInstance->TakeWidget());
+	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	SetInputMode(Mode);
+}
+
+void AChessPlayerController::HidePauseMenu()
+{
+	if (PauseMenuInstance && PauseMenuInstance->IsInViewport())
+		PauseMenuInstance->RemoveFromParent();
+
+	UGameplayStatics::SetGamePaused(this, false);
+	bPaused = false;
+
+	FInputModeGameAndUI Mode;
+	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	Mode.SetHideCursorDuringCapture(false);
+	SetInputMode(Mode);
+	bShowMouseCursor = true;
+}
+
+void AChessPlayerController::ResumeGame()
+{
+	HidePauseMenu();
+}
+
+void AChessPlayerController::RestartArena()
+{
+	UGameplayStatics::SetGamePaused(this, false);
+	const FString Current = UGameplayStatics::GetCurrentLevelName(this, true);
+	UGameplayStatics::OpenLevel(this, FName(*Current));
+}
+
+void AChessPlayerController::QuitToMainMenu()
+{
+	UGameplayStatics::SetGamePaused(this, false);
+	UGameplayStatics::OpenLevel(this, MainMenuMapName);
+}
+
+// ---------------------------------------------------------------------------
+// Promotion (from main)
+// ---------------------------------------------------------------------------
 
 void AChessPlayerController::CompletePromotion(const FString& PieceLetter)
 {

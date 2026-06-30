@@ -7,6 +7,7 @@
 class AChessBoard;
 class AChessManager;
 class AChessPiece;
+class UUserWidget;
 
 
 UCLASS()
@@ -30,6 +31,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess")
 	AChessManager* Manager = nullptr;
 
+	// --- Pause menu ---
+	UFUNCTION(BlueprintCallable, Category = "Chess|Pause") void TogglePause();
+	UFUNCTION(BlueprintCallable, Category = "Chess|Pause") void ResumeGame();
+	UFUNCTION(BlueprintCallable, Category = "Chess|Pause") void RestartArena();
+	UFUNCTION(BlueprintCallable, Category = "Chess|Pause") void QuitToMainMenu();
+
+	// WBP_PauseMenu (soft ref: no hard dependency before the asset exists).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Pause")
+	TSoftClassPtr<UUserWidget> PauseMenuClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Pause")
+	FName MainMenuMapName = TEXT("MainMenu");
+
+	// --- Promotion picker (from main) ---
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|UI")
 	TSubclassOf<UUserWidget> PromotionPickerClass;
 
@@ -40,6 +55,14 @@ public:
 	void ResetTurnState();
 
 private:
+	void ShowPauseMenu();
+	void HidePauseMenu();
+
+	UPROPERTY()
+	UUserWidget* PauseMenuInstance = nullptr;
+
+	bool bPaused = false;
+
 	//Actions
 	void OnSelect();
 	void OnDeselect();
