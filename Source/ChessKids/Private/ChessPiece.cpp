@@ -73,15 +73,21 @@ void AChessPiece::SetupMeshAndMaterial(const FPieceMeshConfig* MeshOverride)
 		break;
 	}
 
-	if (MeshPath)
-	{
-		USkeletalMesh* Mesh = LoadObject<USkeletalMesh>(nullptr, MeshPath);
-		if (Mesh)
-			MeshComp->SetSkeletalMesh(Mesh);
-	}
+	USkeletalMesh* Mesh = MeshPath ? LoadObject<USkeletalMesh>(nullptr, MeshPath) : nullptr;
+	if (Mesh)
+		MeshComp->SetSkeletalMesh(Mesh);
 
 	MeshComp->SetRelativeScale3D(Scale);
-	MeshComp->SetRelativeLocation(FVector(0.f, 0.f, Scale.Z * 50.f));
+
+	// Seat the piece on the board: offset so the mesh's lowest point rests at the actor
+	// origin (the square surface), regardless of where the skeletal mesh's pivot sits.
+	float MeshBottomLocal = 0.f;
+	if (Mesh)
+	{
+		const FBoxSphereBounds B = Mesh->GetBounds();
+		MeshBottomLocal = B.Origin.Z - B.BoxExtent.Z;
+	}
+	MeshComp->SetRelativeLocation(FVector(0.f, 0.f, -MeshBottomLocal * Scale.Z));
 
 	if (PieceColor == EChessColor::White)
 	{
