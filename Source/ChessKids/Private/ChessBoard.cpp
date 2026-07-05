@@ -198,12 +198,15 @@ void AChessBoard::BuildHolographicFrame()
 	const float GridScale = FullBoard / 100.f;
 	const float BoardEdge = 4.f * SquareSize; // outer edge of the board
 
-	// neon grid overlay over the whole 8x8 surface
+	// neon grid overlay over the whole 8x8 surface — hidden when no material is
+	// assigned (a bare plane would render opaque default-gray and cover the squares)
 	GridOverlayMesh = MakeMeshComp(this, TEXT("GridOverlay"), PlaneMesh, GetRootComponent(),
 		FVector(0.f, 0.f, GridOverlayZOffset), FVector(GridScale, GridScale, 1.f), GridOverlayMaterial);
+	GridOverlayMesh->SetVisibility(GridOverlayMaterial != nullptr);
 
 	ScanPlaneMesh = MakeMeshComp(this, TEXT("ScanPlane"), PlaneMesh, GetRootComponent(),
 		FVector(0.f, 0.f, GridOverlayZOffset), FVector(GridScale, GridScale, ScanPlaneZScale), HolographicScanMaterial);
+	ScanPlaneMesh->SetVisibility(HolographicScanMaterial != nullptr);
 
 	// one point light per edge, sitting just above the board surface
 	auto AddLight = [&](FName Name, FVector Pos)
