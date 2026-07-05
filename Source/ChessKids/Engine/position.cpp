@@ -166,6 +166,22 @@ bool Position::isRepetition() {
 	return false;
 }
 
+bool Position::isThreefoldRepetition() {
+	// Count how many times the current position has occurred earlier. Two prior
+	// occurrences plus the current one make three (true threefold repetition).
+	int count = 0;
+	int j = std::max(0, statesSize - halfmoveClock);
+	for (int i = statesSize - 2; i >= j; i -= 2) {
+		if (zobristKey == states[i].zobristKey) {
+			if (++count >= 2) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 bool Position::hasInsufficientMaterial() {
 	// If there is only one minor left, we are unable to checkmate
 	return bitboard::size(pieces[color::WHITE][piecetype::PAWN]) == 0

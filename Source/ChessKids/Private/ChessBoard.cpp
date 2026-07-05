@@ -1,6 +1,8 @@
 // ChessBoard.cpp
 
 #include "ChessBoard.h"
+#include "ChessPiece.h"
+#include "ChessKidsGameInstance.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -31,6 +33,45 @@ void AChessBoard::BeginPlay()
 {
 	Super::BeginPlay();
 	//SnapModelToBoard(); // re-snap at runtime in case the actor was moved after OnConstruction
+
+	// Re-apply the player's saved board colors (settings sliders) — custom hues
+	// win over themes when set.
+	if (const UChessKidsGameInstance* GI = Cast<UChessKidsGameInstance>(GetGameInstance()))
+	{
+		if (GI->bCustomBoardColors)
+			SetSquareColors(UChessKidsGameInstance::LightColorFromHue(GI->LightSquareHue),
+			                UChessKidsGameInstance::DarkColorFromHue(GI->DarkSquareHue));
+		else if (BoardThemes.IsValidIndex(GI->BoardThemeIndex) && GI->BoardThemeIndex != CurrentThemeIndex)
+			SetBoardTheme(GI->BoardThemeIndex);
+	}
+}
+
+void AChessBoard::SetSquareColors(FLinearColor LightColor, FLinearColor DarkColor)
+{
+	LightSquareColor = LightColor;
+	DarkSquareColor  = DarkColor;
+
+	if (LightTintDMI && DarkTintDMI)
+	{
+		// Fast path: squares already re-skinned to the tint DMIs — just retint.
+		LightTintDMI->SetVectorParameterValue(TEXT("Color"), LightColor);
+		DarkTintDMI->SetVectorParameterValue(TEXT("Color"), DarkColor);
+		return;
+	}
+
+	// First recolor this session: create the DMIs and take over the squares.
+	EnsureTintDMIs();
+	if (!LightTintDMI || !DarkTintDMI) return;
+
+	for (int32 Idx = 0; Idx < SquareMeshes.Num(); ++Idx)
+	{
+		UStaticMeshComponent* Sq = SquareMeshes[Idx];
+		if (!IsValid(Sq)) continue;
+		const int32 File = Idx % 8;
+		const int32 Rank = Idx / 8;
+		const bool bLight = ((File + Rank) % 2 != 0);
+		Sq->SetMaterial(0, bLight ? LightTintDMI : DarkTintDMI);
+	}
 }
 
 void AChessBoard::Tick(float DeltaTime)
@@ -76,6 +117,22 @@ UStaticMeshComponent* AChessBoard::MakeMeshComp(
 
 //Board squares
 
+void AChessBoard::EnsureTintDMIs()
+{
+	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr,
+		TEXT("/Game/Materials/BoardThemes/M_SquareTint.M_SquareTint"));
+	if (!Base)
+	{
+		LightTintDMI = nullptr;
+		DarkTintDMI = nullptr;
+		return;
+	}
+	LightTintDMI = UMaterialInstanceDynamic::Create(Base, this);
+	DarkTintDMI  = UMaterialInstanceDynamic::Create(Base, this);
+	LightTintDMI->SetVectorParameterValue(TEXT("Color"), LightSquareColor);
+	DarkTintDMI->SetVectorParameterValue(TEXT("Color"), DarkSquareColor);
+}
+
 void AChessBoard::BuildBoard()
 {
 	for (UStaticMeshComponent* M : SquareMeshes)    if (IsValid(M)) M->DestroyComponent();
@@ -86,6 +143,13 @@ void AChessBoard::BuildBoard()
 	UStaticMesh* PlaneMesh = LoadObject<UStaticMesh>(
 		nullptr, TEXT("/Engine/BasicShapes/Plane.Plane"));
 	if (!PlaneMesh) return;
+
+	// Colors ARE the board's look: squares are tinted instances of M_SquareTint,
+	// driven by LightSquareColor/DarkSquareColor (details panel or in-game sliders).
+	// The material slots are only a fallback when the tint material is missing.
+	EnsureTintDMIs();
+	UMaterialInterface* LightMat = LightTintDMI ? (UMaterialInterface*)LightTintDMI : LightSquareMaterial;
+	UMaterialInterface* DarkMat  = DarkTintDMI  ? (UMaterialInterface*)DarkTintDMI  : DarkSquareMaterial;
 
 	const float Scale     = SquareSize / 100.f;
 	const float HalfBoard = 3.5f * SquareSize;
@@ -102,7 +166,7 @@ void AChessBoard::BuildBoard()
 				this, *FString::Printf(TEXT("Sq_%d_%d"), File, Rank),
 				PlaneMesh, GetRootComponent(), LocalPos,
 				FVector(Scale, Scale, 1.f),
-				bLight ? LightSquareMaterial : DarkSquareMaterial);
+				bLight ? LightMat : DarkMat);
 			SquareMeshes.Add(Sq); // register square so SetBoardTheme() can re-skin it in place
 			Sq->SetCollisionEnabled(ECollisionEnabled::QueryOnly); // ← only square meshes get collision
 
@@ -314,6 +378,17 @@ void AChessBoard::SnapActorToSquare(AActor* ActorToSnap, int32 File, int32 Rank,
     /*UE_LOG(LogTemp, Warning, TEXT("Snap %s: (%d,%d,%.1f) Before=%s After=%s Target=%s"),
         *GetNameSafe(ActorToSnap), File, Rank, ZOffset,
         *Before.ToString(), *After.ToString(), *Target.ToString());*/
+}
+
+void AChessBoard::GlideActorToSquare(AActor* ActorToMove, int32 File, int32 Rank, float ZOffset)
+{
+	if (!ActorToMove) return;
+
+	const FVector Target = FileRankToWorldLocation(File, Rank, ZOffset);
+	if (AChessPiece* Piece = Cast<AChessPiece>(ActorToMove))
+		Piece->StartGlide(Target);
+	else
+		ActorToMove->SetActorLocation(Target, false, nullptr, ETeleportType::TeleportPhysics);
 }
 
 // Themes

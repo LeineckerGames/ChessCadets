@@ -6,7 +6,9 @@
 
 AChessPiece::AChessPiece()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	// Tick exists only to drive the move glide; it stays disabled until StartGlide.
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 
 	USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(Root);
@@ -16,6 +18,41 @@ AChessPiece::AChessPiece()
 	MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	MeshComp->SetCollisionResponseToAllChannels(ECR_Ignore);
 	MeshComp->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+}
+
+void AChessPiece::StartGlide(const FVector& TargetLocation, float Duration)
+{
+	GlideStart = GetActorLocation();
+	GlideTarget = TargetLocation;
+	GlideElapsed = 0.f;
+	GlideDuration = FMath::Max(Duration, 0.01f);
+	bGliding = true;
+	SetActorTickEnabled(true);
+}
+
+void AChessPiece::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+	if (!bGliding) { SetActorTickEnabled(false); return; }
+
+	GlideElapsed += DeltaTime;
+	const float Alpha = FMath::Clamp(GlideElapsed / GlideDuration, 0.f, 1.f);
+	const float Eased = FMath::InterpEaseInOut(0.f, 1.f, Alpha, 2.f);
+
+	FVector Pos = FMath::Lerp(GlideStart, GlideTarget, Eased);
+
+	// A small hop makes the move readable; knights leap higher, as they should.
+	const float HopHeight = (PieceType == EChessPieceType::Knight) ? 30.f : 8.f;
+	Pos.Z += FMath::Sin(Alpha * PI) * HopHeight;
+
+	SetActorLocation(Pos);
+
+	if (Alpha >= 1.f)
+	{
+		SetActorLocation(GlideTarget);
+		bGliding = false;
+		SetActorTickEnabled(false);
+	}
 }
 
 void AChessPiece::Init(EChessPieceType Type, EChessColor Color, int32 File, int32 Rank, const FPieceMeshConfig* MeshOverride)
