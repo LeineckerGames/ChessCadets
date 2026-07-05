@@ -1,14 +1,20 @@
 #include "PauseMenuWidget.h"
+#include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/TextBlock.h"
 #include "Blueprint/WidgetTree.h"
 #include "ChessPlayerController.h"
+#include "ChessManager.h"
+#include "ChessKidsGameInstance.h"
 #include "SettingsMenuWidget.h"
 #include "InputCoreTypes.h"
+#include "Styling/CoreStyle.h"
 
 TSharedRef<SWidget> UPauseMenuWidget::RebuildWidget()
 {
@@ -19,17 +25,24 @@ TSharedRef<SWidget> UPauseMenuWidget::RebuildWidget()
 		UCanvasPanel* Root = WidgetTree->ConstructWidget<UCanvasPanel>();
 		WidgetTree->RootWidget = Root;
 
-		UVerticalBox* Box = WidgetTree->ConstructWidget<UVerticalBox>();
-		if (UCanvasPanelSlot* CS = Root->AddChildToCanvas(Box))
+		// Dark panel behind the menu content only — readable text, scene visible around it.
+		UBorder* Panel = WidgetTree->ConstructWidget<UBorder>();
+		Panel->SetBrushColor(FLinearColor(0.f, 0.f, 0.04f, 0.85f));
+		Panel->SetPadding(FMargin(36.f, 24.f));
+		if (UCanvasPanelSlot* PS = Root->AddChildToCanvas(Panel))
 		{
-			CS->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
-			CS->SetAlignment(FVector2D(0.5f, 0.5f));
-			CS->SetAutoSize(true);
+			PS->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
+			PS->SetAlignment(FVector2D(0.5f, 0.5f));
+			PS->SetAutoSize(true);
 		}
 
+		UVerticalBox* Box = WidgetTree->ConstructWidget<UVerticalBox>();
+		Panel->AddChild(Box);
+
 		UTextBlock* Title = WidgetTree->ConstructWidget<UTextBlock>();
-		Title->SetText(FText::FromString(TEXT("Paused")));
+		Title->SetText(FText::FromString(TEXT("PAUSED")));
 		Title->SetJustification(ETextJustify::Center);
+		Title->SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 34));
 		if (UVerticalBoxSlot* TS = Box->AddChildToVerticalBox(Title))
 		{
 			TS->SetPadding(FMargin(16.f, 12.f));
@@ -42,6 +55,8 @@ TSharedRef<SWidget> UPauseMenuWidget::RebuildWidget()
 			UTextBlock* T = WidgetTree->ConstructWidget<UTextBlock>();
 			T->SetText(FText::FromString(Label));
 			T->SetJustification(ETextJustify::Center);
+			T->SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 18));
+			T->SetColorAndOpacity(FSlateColor(FLinearColor(0.05f, 0.05f, 0.08f)));
 			OutBtn->AddChild(T);
 			if (UVerticalBoxSlot* BS = Box->AddChildToVerticalBox(OutBtn))
 			{
@@ -51,9 +66,48 @@ TSharedRef<SWidget> UPauseMenuWidget::RebuildWidget()
 		};
 
 		MakeButton(ResumeButton, TEXT("Resume"));
+		MakeButton(UndoButton, TEXT("Undo Move"));
+		MakeButton(TwoPlayerButton, TEXT("Two Players: Off"));
 		MakeButton(RestartButton, TEXT("Restart"));
 		MakeButton(SettingsButton, TEXT("Settings"));
 		MakeButton(QuitButton, TEXT("Quit to Menu"));
+
+		// Difficulty picker: label + Easy / Medium / Hard side by side.
+		DifficultyLabel = WidgetTree->ConstructWidget<UTextBlock>();
+		DifficultyLabel->SetText(FText::FromString(TEXT("Robot Difficulty")));
+		DifficultyLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 16));
+		DifficultyLabel->SetJustification(ETextJustify::Center);
+		if (UVerticalBoxSlot* DS = Box->AddChildToVerticalBox(DifficultyLabel))
+		{
+			DS->SetPadding(FMargin(16.f, 14.f, 16.f, 4.f));
+			DS->SetHorizontalAlignment(HAlign_Center);
+		}
+
+		UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
+		if (UVerticalBoxSlot* RS = Box->AddChildToVerticalBox(Row))
+		{
+			RS->SetPadding(FMargin(24.f, 4.f, 24.f, 8.f));
+			RS->SetHorizontalAlignment(HAlign_Fill);
+		}
+
+		auto MakeDifficultyButton = [&](UButton*& OutBtn, const TCHAR* Label)
+		{
+			OutBtn = WidgetTree->ConstructWidget<UButton>();
+			UTextBlock* T = WidgetTree->ConstructWidget<UTextBlock>();
+			T->SetText(FText::FromString(Label));
+			T->SetJustification(ETextJustify::Center);
+			T->SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 16));
+			T->SetColorAndOpacity(FSlateColor(FLinearColor(0.05f, 0.05f, 0.08f)));
+			OutBtn->AddChild(T);
+			if (UHorizontalBoxSlot* HS = Row->AddChildToHorizontalBox(OutBtn))
+			{
+				HS->SetPadding(FMargin(4.f, 0.f));
+				HS->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			}
+		};
+		MakeDifficultyButton(EasyButton, TEXT("Easy"));
+		MakeDifficultyButton(MediumButton, TEXT("Medium"));
+		MakeDifficultyButton(HardButton, TEXT("Hard"));
 	}
 
 	return Super::RebuildWidget();
@@ -63,10 +117,20 @@ void UPauseMenuWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	if (ResumeButton)   ResumeButton->OnClicked.AddDynamic(this, &UPauseMenuWidget::OnResumeClicked);
-	if (RestartButton)  RestartButton->OnClicked.AddDynamic(this, &UPauseMenuWidget::OnRestartClicked);
-	if (SettingsButton) SettingsButton->OnClicked.AddDynamic(this, &UPauseMenuWidget::OnSettingsClicked);
-	if (QuitButton)     QuitButton->OnClicked.AddDynamic(this, &UPauseMenuWidget::OnQuitClicked);
+	// NativeConstruct re-fires on every AddToViewport (the widget instance is cached and
+	// re-added each pause) — AddUniqueDynamic keeps the handlers from stacking up.
+	if (ResumeButton)   ResumeButton->OnClicked.AddUniqueDynamic(this, &UPauseMenuWidget::OnResumeClicked);
+	if (UndoButton)     UndoButton->OnClicked.AddUniqueDynamic(this, &UPauseMenuWidget::OnUndoClicked);
+	if (RestartButton)  RestartButton->OnClicked.AddUniqueDynamic(this, &UPauseMenuWidget::OnRestartClicked);
+	if (SettingsButton) SettingsButton->OnClicked.AddUniqueDynamic(this, &UPauseMenuWidget::OnSettingsClicked);
+	if (QuitButton)     QuitButton->OnClicked.AddUniqueDynamic(this, &UPauseMenuWidget::OnQuitClicked);
+	if (EasyButton)     EasyButton->OnClicked.AddUniqueDynamic(this, &UPauseMenuWidget::OnEasyClicked);
+	if (MediumButton)   MediumButton->OnClicked.AddUniqueDynamic(this, &UPauseMenuWidget::OnMediumClicked);
+	if (HardButton)     HardButton->OnClicked.AddUniqueDynamic(this, &UPauseMenuWidget::OnHardClicked);
+	if (TwoPlayerButton) TwoPlayerButton->OnClicked.AddUniqueDynamic(this, &UPauseMenuWidget::OnTwoPlayerClicked);
+
+	RefreshDifficultyLabel();
+	RefreshTwoPlayerButton();
 }
 
 FReply UPauseMenuWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
@@ -85,12 +149,18 @@ FReply UPauseMenuWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKey
 
 void UPauseMenuWidget::OnResumeClicked()
 {
+	// Close the settings panel with the pause menu — leaving it up was how menus
+	// got "stuck" on screen after resuming.
+	if (SettingsInstance && SettingsInstance->IsInViewport())
+		SettingsInstance->RemoveFromParent();
 	if (AChessPlayerController* PC = Cast<AChessPlayerController>(GetOwningPlayer()))
 		PC->ResumeGame();
 }
 
 void UPauseMenuWidget::OnRestartClicked()
 {
+	if (SettingsInstance && SettingsInstance->IsInViewport())
+		SettingsInstance->RemoveFromParent();
 	if (AChessPlayerController* PC = Cast<AChessPlayerController>(GetOwningPlayer()))
 		PC->RestartArena();
 }
@@ -107,6 +177,80 @@ void UPauseMenuWidget::OnSettingsClicked()
 
 void UPauseMenuWidget::OnQuitClicked()
 {
+	if (SettingsInstance && SettingsInstance->IsInViewport())
+		SettingsInstance->RemoveFromParent();
 	if (AChessPlayerController* PC = Cast<AChessPlayerController>(GetOwningPlayer()))
 		PC->QuitToMainMenu();
+}
+
+void UPauseMenuWidget::OnUndoClicked()
+{
+	AChessPlayerController* PC = Cast<AChessPlayerController>(GetOwningPlayer());
+	if (!PC || !PC->Manager) return;
+	// Resume first (UndoMove no-ops while paused), then take back via the controller
+	// path so the queued AI-reply timer and selection state are cleared too.
+	PC->ResumeGame();
+	PC->UndoMove();
+}
+
+void UPauseMenuWidget::OnEasyClicked()   { SetDifficulty(1); }
+void UPauseMenuWidget::OnMediumClicked() { SetDifficulty(2); }
+void UPauseMenuWidget::OnHardClicked()   { SetDifficulty(3); }
+
+void UPauseMenuWidget::SetDifficulty(int32 Level)
+{
+	AChessPlayerController* PC = Cast<AChessPlayerController>(GetOwningPlayer());
+	if (PC && PC->Manager)
+		PC->Manager->SetDifficulty(Level);   // also persists to the GameInstance
+	RefreshDifficultyLabel();
+}
+
+void UPauseMenuWidget::RefreshDifficultyLabel()
+{
+	if (!DifficultyLabel) return;
+
+	int32 Level = 1;
+	bool bTwoPlayer = false;
+	if (AChessPlayerController* PC = Cast<AChessPlayerController>(GetOwningPlayer()))
+		if (PC->Manager)
+		{
+			Level = PC->Manager->GetDifficulty();
+			bTwoPlayer = PC->Manager->IsTwoPlayerMode();
+		}
+
+	// No robot in hot-seat mode — hide the difficulty controls.
+	const ESlateVisibility Vis = bTwoPlayer ? ESlateVisibility::Collapsed : ESlateVisibility::Visible;
+	DifficultyLabel->SetVisibility(Vis);
+	if (EasyButton)   EasyButton->SetVisibility(Vis);
+	if (MediumButton) MediumButton->SetVisibility(Vis);
+	if (HardButton)   HardButton->SetVisibility(Vis);
+
+	const TCHAR* Name = (Level == 3) ? TEXT("Hard") : (Level == 2) ? TEXT("Medium") : TEXT("Easy");
+	DifficultyLabel->SetText(FText::FromString(FString::Printf(TEXT("Robot Difficulty: %s"), Name)));
+}
+
+void UPauseMenuWidget::OnTwoPlayerClicked()
+{
+	AChessPlayerController* PC = Cast<AChessPlayerController>(GetOwningPlayer());
+	if (!PC) return;
+
+	UChessKidsGameInstance* GI = Cast<UChessKidsGameInstance>(GetGameInstance());
+	if (!GI) return;
+
+	// Flip the persisted mode and restart the arena so the game starts cleanly in it
+	// (AChessManager::BeginPlay picks the flag up on load).
+	GI->bTwoPlayerMode = !GI->bTwoPlayerMode;
+	PC->RestartArena();
+}
+
+void UPauseMenuWidget::RefreshTwoPlayerButton()
+{
+	if (!TwoPlayerButton) return;
+
+	bool bTwoPlayer = false;
+	if (const UChessKidsGameInstance* GI = Cast<UChessKidsGameInstance>(GetGameInstance()))
+		bTwoPlayer = GI->bTwoPlayerMode;
+
+	if (UTextBlock* Label = Cast<UTextBlock>(TwoPlayerButton->GetChildAt(0)))
+		Label->SetText(FText::FromString(bTwoPlayer ? TEXT("Two Players: On") : TEXT("Two Players: Off")));
 }
