@@ -8,6 +8,7 @@
 #include "TimerManager.h"
 #include "Blueprint/UserWidget.h"
 #include "PauseMenuWidget.h"
+#include "ChessHudWidget.h"
 
 AChessPlayerController::AChessPlayerController()
 {
@@ -34,6 +35,16 @@ void AChessPlayerController::BeginPlay()
 		Board = Cast<AChessBoard>(UGameplayStatics::GetActorOfClass(this, AChessBoard::StaticClass()));
 	if (!Manager)
 		Manager = Cast<AChessManager>(UGameplayStatics::GetActorOfClass(this, AChessManager::StaticClass()));
+
+	// HUD only where there is a game to narrate (menu maps have no manager).
+	if (Manager && !HudInstance)
+	{
+		UClass* Cls = HudClass.LoadSynchronous();
+		if (!Cls) Cls = UChessHudWidget::StaticClass();   // C++ fallback UI
+		HudInstance = CreateWidget<UUserWidget>(this, Cls);
+		if (HudInstance)
+			HudInstance->AddToViewport(10);
+	}
 }
 
 void AChessPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -63,6 +74,9 @@ void AChessPlayerController::SetupInputComponent()
 	EscBinding.bExecuteWhenPaused = true;
 	FInputKeyBinding& PBinding = InputComponent->BindKey(EKeys::P, IE_Pressed, this, &AChessPlayerController::TogglePause);
 	PBinding.bExecuteWhenPaused = true;
+
+	// Z = take back the last move (lets a child recover from a mistake).
+	InputComponent->BindKey(EKeys::Z, IE_Pressed, this, &AChessPlayerController::UndoMove);
 }
 
 void AChessPlayerController::HandleHover()
@@ -112,11 +126,35 @@ void AChessPlayerController::OnDeselect()
 	Board->ClearHighlights();
 }
 
+void AChessPlayerController::UndoMove()
+{
+	if (bPaused || !Manager) return;
+
+	// Cancel any queued/in-flight AI reply, clear selection, then take back the move.
+	GetWorldTimerManager().ClearTimer(AITimerHandle);
+	if (Board) Board->ClearHighlights();
+	bPieceSelected = false;
+	bIsAIThinking = false;
+	HoveredSquare.Empty();
+	Manager->UndoLastMove();
+}
+
 void AChessPlayerController::OnSelect()
 {
 	if (bPaused) return;   // ignore board clicks while the pause menu is up
 	if (!Board || !Manager || bIsAIThinking) return;
-	if (Manager->GetActiveColor() != TEXT("white")) return;
+	if (Manager->IsGameOver()) return;   // draws leave legal moves — don't play behind the overlay
+
+	const bool bTwoPlayer = Manager->IsTwoPlayerMode();
+	const bool bWhiteToMove = Manager->GetActiveColor() == TEXT("white");
+	if (!bTwoPlayer && !bWhiteToMove) return;   // vs AI the human is always White
+
+	// The side to move may only pick up its own pieces (upper = white, lower = black).
+	auto IsOwnPiece = [bWhiteToMove](const FString& PieceStr)
+	{
+		if (PieceStr.IsEmpty()) return false;
+		return bWhiteToMove ? FChar::IsUpper(PieceStr[0]) : FChar::IsLower(PieceStr[0]);
+	};
 
 	FHitResult Hit;
 	if (!GetHitResultUnderCursor(ECC_Visibility, false, Hit))
@@ -128,8 +166,7 @@ void AChessPlayerController::OnSelect()
 
 	if (!bPieceSelected)
 	{
-		FString PieceStr = Manager->GetPieceOnSquare(ClickedSquare);
-		if (PieceStr.IsEmpty() || !FChar::IsUpper(PieceStr[0])) return;
+		if (!IsOwnPiece(Manager->GetPieceOnSquare(ClickedSquare))) return;
 		SelectPieceOnSquare(ClickedSquare);
 	}
 	else
@@ -142,8 +179,7 @@ void AChessPlayerController::OnSelect()
 			return;
 		}
 
-		FString PieceStr = Manager->GetPieceOnSquare(ClickedSquare);
-		if (!PieceStr.IsEmpty() && FChar::IsUpper(PieceStr[0]))
+		if (IsOwnPiece(Manager->GetPieceOnSquare(ClickedSquare)))
 		{
 			SelectPieceOnSquare(ClickedSquare);
 			return;
@@ -168,17 +204,21 @@ void AChessPlayerController::OnSelect()
 				PromotionPickerWidget = CreateWidget<UUserWidget>(this, PromotionPickerClass);
 				if (PromotionPickerWidget)
 				{
-					PromotionPickerWidget->AddToViewport();
+					PromotionPickerWidget->AddToViewport(60);   // above the HUD (10), below settings (100)
 					FInputModeUIOnly UIMode;
 					SetInputMode(UIMode);
 				}
 			}
+
+			// No picker widget available — auto-queen instead of soft-locking the turn.
+			if (!PromotionPickerWidget)
+				CompletePromotion(TEXT("q"));
 			return;
 		}
 		bool bSuccess = Manager->MakeMove(MoveStr);
 		//bPieceSelected = false;
 
-		if (bSuccess)
+		if (bSuccess && !bTwoPlayer)   // hot-seat: the other human just plays next
 		{
 			bIsAIThinking = true;
 			TWeakObjectPtr<AChessPlayerController> WeakThis(this);
@@ -199,6 +239,8 @@ void AChessPlayerController::OnSelect()
 
 void AChessPlayerController::TogglePause()
 {
+	if (!Manager) return;   // menu maps have no game to pause
+
 	if (bPaused)
 		ResumeGame();
 	else
@@ -294,15 +336,18 @@ void AChessPlayerController::CompletePromotion(const FString& PieceLetter)
 	if (bSuccess)
 	{
 		Manager->RefreshBoard();
-		bIsAIThinking = true;
-		TWeakObjectPtr<AChessPlayerController> WeakThis(this);
-		GetWorldTimerManager().SetTimer(AITimerHandle, [WeakThis]()
-			{
-				AChessPlayerController* Self = WeakThis.Get();
-				if (!Self) return;
-				if (IsValid(Self->Manager)) Self->Manager->RequestAIMove();
-				Self->bIsAIThinking = false;
-			}, 0.5f, false);
+		if (!Manager->IsTwoPlayerMode())
+		{
+			bIsAIThinking = true;
+			TWeakObjectPtr<AChessPlayerController> WeakThis(this);
+			GetWorldTimerManager().SetTimer(AITimerHandle, [WeakThis]()
+				{
+					AChessPlayerController* Self = WeakThis.Get();
+					if (!Self) return;
+					if (IsValid(Self->Manager)) Self->Manager->RequestAIMove();
+					Self->bIsAIThinking = false;
+				}, 0.5f, false);
+		}
 	}
 }
 

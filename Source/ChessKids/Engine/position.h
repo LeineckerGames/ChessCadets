@@ -55,6 +55,10 @@ public:
 
 	bool isRepetition();
 
+	// True only on the THIRD occurrence of the current position (real FIDE threefold).
+	// isRepetition() above returns on the first repeat (twofold) and is used by the search.
+	bool isThreefoldRepetition();
+
 	bool hasInsufficientMaterial();
 
 	void put(int piece, int square);

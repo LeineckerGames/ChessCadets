@@ -1,10 +1,14 @@
 #include "ChessManager.h"
 #include "ChessBoard.h"
 #include "ChessPiece.h"
+#include "ChessKidsGameInstance.h"
 #include "Async/Async.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "Kismet/GameplayStatics.h"
+#include "TimerManager.h"
+#include "Sound/SoundBase.h"
+#include "Components/AudioComponent.h"
 
 THIRD_PARTY_INCLUDES_START
 #include "position.h"
@@ -91,6 +95,30 @@ static const TCHAR* PieceToChar(int Piece)
 	}
 }
 
+// Maps a Pulse promotion piecetype to a FEN-style letter (upper = white, lower = black).
+static FString PromotionLetter(int PromoType, bool bWhite)
+{
+	TCHAR C;
+	switch (PromoType)
+	{
+	case pulse::piecetype::ROOK:   C = 'r'; break;
+	case pulse::piecetype::BISHOP: C = 'b'; break;
+	case pulse::piecetype::KNIGHT: C = 'n'; break;
+	case pulse::piecetype::QUEEN:
+	default:                       C = 'q'; break;
+	}
+	if (bWhite) C = FChar::ToUpper(C);
+	return FString::Chr(C);
+}
+
+// True if the FEN's active-colour field (2nd token) is black-to-move.
+static bool FENIsBlackToMove(const FString& FEN)
+{
+	TArray<FString> Parts;
+	FEN.ParseIntoArray(Parts, TEXT(" "), true);
+	return Parts.Num() >= 2 && Parts[1] == TEXT("b");
+}
+
 AChessManager::AChessManager()
 {
 	PrimaryActorTick.bCanEverTick = false;
@@ -99,14 +127,77 @@ AChessManager::AChessManager()
 void AChessManager::BeginPlay()
 {
 	Super::BeginPlay();
-		
+
 	NewGame();
-	SetDifficulty(1);
+
+	// Difficulty + mode are the player's persisted choices (GameInstance survives level travel).
+	int32 Level = 1;
+	if (const UChessKidsGameInstance* GI = Cast<UChessKidsGameInstance>(GetGameInstance()))
+	{
+		Level = GI->Difficulty;
+		bTwoPlayerMode = GI->bTwoPlayerMode;
+	}
+	SetDifficulty(Level);
+
 	if (!Board)
 		Board = Cast<AChessBoard>(UGameplayStatics::GetActorOfClass(this, AChessBoard::StaticClass()));
 	SpawnAllPieces();
 
 	OnMoveMade.AddDynamic(this, &AChessManager::HandleMoveMade);
+
+	ResolveDefaultSounds();
+	if (BackgroundMusic)
+	{
+		MusicComponent = UGameplayStatics::SpawnSound2D(this, BackgroundMusic, MusicVolume,
+			1.f, 0.f, nullptr, /*bPersistAcrossLevelTransition*/ false, /*bAutoDestroy*/ false);
+		if (MusicComponent)
+			MusicComponent->OnAudioFinished.AddDynamic(this, &AChessManager::RestartMusic);   // loop
+	}
+}
+
+void AChessManager::ResolveDefaultSounds()
+{
+	// Runtime soft-path resolution instead of ConstructorHelpers: the sound packs are
+	// local-only content, so a machine without them must degrade to silence, not assert.
+	auto Resolve = [](USoundBase*& Slot, const TCHAR* Path)
+	{
+		if (!Slot)
+			Slot = Cast<USoundBase>(FSoftObjectPath(Path).TryLoad());
+	};
+	Resolve(MoveSound,       TEXT("/Game/GlitchNoises/Sounds/SoundCues/UserInterface/UIClick_Select_001_VZ_GN_Cue.UIClick_Select_001_VZ_GN_Cue"));
+	Resolve(CaptureSound,    TEXT("/Game/GlitchNoises/Sounds/SoundCues/UserInterface/UIAlert_Cancel_001_VZ_GN_Cue.UIAlert_Cancel_001_VZ_GN_Cue"));
+	Resolve(CheckSound,      TEXT("/Game/GlitchNoises/Sounds/SoundCues/UserInterface/UIAlert_Warning_001_VZ_GN_Cue.UIAlert_Warning_001_VZ_GN_Cue"));
+	Resolve(WinSound,        TEXT("/Game/GlitchNoises/Sounds/SoundCues/UserInterface/UIData_Processing_Complete_001_VZ_GN_Cue.UIData_Processing_Complete_001_VZ_GN_Cue"));
+	Resolve(LoseSound,       TEXT("/Game/GlitchNoises/Sounds/SoundCues/UserInterface/UIMvmt_Transition_001_VZ_GN_Cue.UIMvmt_Transition_001_VZ_GN_Cue"));
+	Resolve(DrawSound,       TEXT("/Game/GlitchNoises/Sounds/SoundCues/UserInterface/UIAlert_Notification_001_VZ_GN_Cue.UIAlert_Notification_001_VZ_GN_Cue"));
+	// BackgroundMusic gets NO default: arena music is owned by Marco's BP_MusicManager
+	// (Content/Music, per-arena tracks). Set this property only to override it.
+}
+
+void AChessManager::PlaySfx(USoundBase* Sound) const
+{
+	if (Sound)
+		UGameplayStatics::PlaySound2D(this, Sound, SfxVolume);
+}
+
+void AChessManager::RestartMusic()
+{
+	if (MusicComponent && BackgroundMusic)
+		MusicComponent->Play();
+}
+
+void AChessManager::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// Level travel flushes audio AFTER EndPlay; without unbinding, OnAudioFinished
+	// fires on that Stop() and RestartMusic re-plays into the dying world, stacking
+	// an orphaned track per Restart/Quit.
+	if (MusicComponent)
+	{
+		MusicComponent->OnAudioFinished.RemoveDynamic(this, &AChessManager::RestartMusic);
+		MusicComponent->Stop();
+		MusicComponent = nullptr;
+	}
+	Super::EndPlay(EndPlayReason);
 }
 
 void AChessManager::BeginDestroy()
@@ -131,6 +222,8 @@ void AChessManager::NewGame()
 	}
 
 	Engine = new FEngineImpl();
+	bExpectingAIMove = false;
+	FENHistory.Empty();   // a fresh game must not let Undo reach into a previous game's snapshots
 
 	// Capture a weak ptr — IsValid(this) is undefined behaviour once the actor is freed,
 	// because it dereferences `this` to read the object flags.
@@ -157,9 +250,7 @@ bool AChessManager::MakeMove(const FString& MoveStr)
 {
 	
 	if (!Engine) return false;
-	// Push BEFORE the move so we can restore to this state
-	FENHistory.Push(GetFEN());
-
+	if (bGameOver) return false;   // finished games accept no more moves (undo re-opens)
 	if (MoveStr.Len() < 4) return false;
 
 	const FString OriginStr   = MoveStr.Mid(0, 2);
@@ -194,6 +285,9 @@ bool AChessManager::MakeMove(const FString& MoveStr)
 			if (pulse::move::getPromotion(M) != ExpectedPromo) continue;
 		}
 
+		// Push BEFORE the move so undo can restore to this state — only now that a real,
+		// legal move has matched (a failed/illegal call must not leave a phantom snapshot).
+		FENHistory.Push(GetFEN());
 		Engine->Position.makeMove(M);
 
 		const FString From = SquareToString(OriginSquare);
@@ -210,6 +304,8 @@ bool AChessManager::MakeMove(const FString& MoveStr)
 void AChessManager::RequestAIMove()
 {
 	if (!Engine) return;
+	if (bTwoPlayerMode) return;   // hot-seat: no AI ever moves
+	bExpectingAIMove = true;   // arm OnBestMoveFound; Undo/NewGame clear this to drop a stale reply
 	UE_LOG(LogTemp, Warning, TEXT("AI thinking at depth %d"), AISearchDepth);
 	// At Easy difficulty, 50% chance of playing a random legal move
 	if (AISearchDepth == 1)
@@ -245,20 +341,27 @@ void AChessManager::StopSearch()
 
 void AChessManager::UndoLastMove()
 {
-
-	// Stop any pending AI search
+	// Stop any in-flight AI search, then DISARM so the best move the aborted search still
+	// emits is dropped by OnBestMoveFound instead of being applied to the restored position.
+	// stop() blocks until that callback is queued, so clearing the flag here (game thread)
+	// guarantees the later-running callback observes it as false.
 	if (Engine) Engine->Search.stop();
+	bExpectingAIMove = false;
 
-	// Need at least 2 snapshots: player's move + AI's move
-	if (FENHistory.Num() < 2) return;
+	if (FENHistory.Num() == 0) return;
 
-	FENHistory.Pop(); // remove AI move snapshot
-	FENHistory.Pop(); // remove player move snapshot
-
-	// Restore to the FEN now on top (before player moved)
-	FString RestoredFEN = FENHistory.Num() > 0
-		? FENHistory.Last()
-		: TEXT("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+	FString RestoredFEN = FENHistory.Pop();
+	if (!bTwoPlayerMode)
+	{
+		// Vs AI: hand the turn back to the player — restore the most recent WHITE-to-move
+		// snapshot, popping any trailing black-to-move (AI) snapshots. Correct whether or
+		// not the AI had replied (early undo, a mating move with no AI reply, etc.).
+		while (FENIsBlackToMove(RestoredFEN) && FENHistory.Num() > 0)
+		{
+			RestoredFEN = FENHistory.Pop();
+		}
+	}
+	// Hot-seat: one pop = take back exactly the last move, whichever color made it.
 
 	SetPositionFromFEN(RestoredFEN);
 	SpawnAllPieces();   // re-sync the 3D pieces to match the restored position
@@ -331,13 +434,18 @@ void AChessManager::SwapPromotedPiece(const FString& Square, const FString& Piec
 
 void AChessManager::SetDifficulty(int32 Level)
 {
-	switch (Level)
+	CurrentDifficulty = FMath::Clamp(Level, 1, 3);
+	switch (CurrentDifficulty)
 	{
 	case 1:  AISearchDepth = 1; break;
 	case 2:  AISearchDepth = 3; break;
-	case 3:  AISearchDepth = 6; break;
-	default: AISearchDepth = 3; break;
+	default: AISearchDepth = 6; break;
 	}
+
+	// Persist so the next arena load (new world, new manager) keeps the choice.
+	if (UChessKidsGameInstance* GI = Cast<UChessKidsGameInstance>(GetGameInstance()))
+		GI->Difficulty = CurrentDifficulty;
+
 	UE_LOG(LogTemp, Warning, TEXT("Difficulty set! AISearchDepth = %d"), AISearchDepth);
 }
 
@@ -392,16 +500,59 @@ FString AChessManager::GetPieceOnSquare(const FString& SquareStr) const
 void AChessManager::OnBestMoveFound(int BestMove)
 {
 	if (!Engine) return;
+
+	// The search delivers via AsyncTask, which the engine pumps even while paused.
+	// Don't move (audibly) behind the pause menu — re-queue on a world timer, which
+	// only advances after unpause. Runs BEFORE the flag is consumed, so an Undo from
+	// the pause menu still cancels the deferred move via bExpectingAIMove.
+	if (UGameplayStatics::IsGamePaused(this))
+	{
+		TWeakObjectPtr<AChessManager> WeakThis(this);
+		FTimerHandle DeferHandle;
+		GetWorldTimerManager().SetTimer(DeferHandle, [WeakThis, BestMove]()
+		{
+			if (AChessManager* Self = WeakThis.Get())
+				Self->OnBestMoveFound(BestMove);
+		}, 0.05f, false);
+		return;
+	}
+
+	// Drop stale callbacks: a search aborted by Undo/NewGame still emits a best move,
+	// which must NOT be applied to the (now restored) position. Only act if still armed.
+	if (!bExpectingAIMove) return;
+	bExpectingAIMove = false;
+
 	if (BestMove == pulse::move::NOMOVE) return;
 
 	const FString From = SquareToString(pulse::move::getOriginSquare(BestMove));
 	const FString To   = SquareToString(pulse::move::getTargetSquare(BestMove));
 
-	
+	// Capture promotion + mover colour BEFORE makeMove flips the active colour.
+	const int Promo = pulse::move::getPromotion(BestMove);
+	const bool bMoverIsWhite = (Engine->Position.activeColor == pulse::color::WHITE);
+
 	FENHistory.Push(GetFEN());
-	
+
 	Engine->Position.makeMove(BestMove);
-	OnMoveMade.Broadcast(From, To);
+	OnMoveMade.Broadcast(From, To);   // starts the pawn's glide (HandleMoveMade)
+
+	// The engine now has a promoted piece on the back rank, but HandleMoveMade only
+	// slid the pawn there — swap in the real promoted mesh so the board matches.
+	// Deferred past the glide so the pawn visibly arrives before morphing; the
+	// square re-check drops the swap if an Undo rewound the position meanwhile.
+	if (Promo != pulse::piecetype::NOPIECETYPE)
+	{
+		const FString PromoLetter = PromotionLetter(Promo, bMoverIsWhite);
+		TWeakObjectPtr<AChessManager> WeakThis(this);
+		FTimerHandle SwapHandle;
+		GetWorldTimerManager().SetTimer(SwapHandle, [WeakThis, To, PromoLetter]()
+		{
+			AChessManager* Self = WeakThis.Get();
+			if (Self && Self->GetPieceOnSquare(To) == PromoLetter)
+				Self->SwapPromotedPiece(To, PromoLetter);
+		}, 0.35f, false);
+	}
+
 	OnAIMoveReady.Broadcast(From, To);
 
 	CheckGameOver();
@@ -424,21 +575,34 @@ void AChessManager::CheckGameOver()
 			const FString Winner = Engine->Position.activeColor == pulse::color::WHITE
 				? TEXT("black") : TEXT("white");
 			bGameOver = true;
+			PlaySfx(Winner == TEXT("white") ? WinSound : LoseSound);
 			OnGameOver.Broadcast(Winner);
 		}
 		else
 		{
 			bGameOver = true;
+			PlaySfx(DrawSound);
 			OnGameOver.Broadcast(TEXT("draw"));
 		}
 		return;
 	}
 
-	if (Engine->Position.isRepetition() || Engine->Position.hasInsufficientMaterial())
+	// Draw conditions: true threefold repetition, the 50-move rule (100 half-moves),
+	// or insufficient mating material. (isRepetition() is twofold and used by the
+	// search; the game RESULT needs real threefold.)
+	if (Engine->Position.isThreefoldRepetition()
+		|| Engine->Position.halfmoveClock >= 100
+		|| Engine->Position.hasInsufficientMaterial())
 	{
 		bGameOver = true;
+		PlaySfx(DrawSound);
 		OnGameOver.Broadcast(TEXT("draw"));
+		return;
 	}
+
+	// Game continues — warn if the side to move is now in check.
+	if (Engine->Position.isCheck())
+		PlaySfx(CheckSound);
 }
 
 EChessPieceType AChessManager::CharToPieceType(TCHAR C)
@@ -529,6 +693,8 @@ void AChessManager::HandleMoveMade(FString From, FString To)
 	if (!Board) return;
 
 	AChessPiece* Captured = FindPieceOnSquare(To);
+	const bool bNormalCapture = (Captured != nullptr);
+	bool bEnPassantCapture = false;
 	if (Captured)
 	{
 		Captured->Destroy();
@@ -542,12 +708,34 @@ void AChessManager::HandleMoveMade(FString From, FString To)
 
 		int32 File = To[0] - 'a';
 		int32 Rank = To[1] - '1';
-		Board->SnapActorToSquare(MovingPiece, File, Rank, 0.f);
+		Board->GlideActorToSquare(MovingPiece, File, Rank, 0.f);
 		MovingPiece->BoardFile = File;
 		MovingPiece->BoardRank = Rank;
 
 		PieceActors.Add(To, MovingPiece);
 	}
+
+	// En passant: a pawn that moved diagonally onto an EMPTY square captured the
+	// enemy pawn beside it (on the moved-from rank, target file). The engine has
+	// already removed that pawn, so mirror it on the 3D board.
+	if (MovingPiece && MovingPiece->PieceType == EChessPieceType::Pawn && !bNormalCapture)
+	{
+		const int32 FromFile = From[0] - 'a';
+		const int32 ToFile   = To[0]   - 'a';
+		const int32 FromRank = From[1] - '1';
+		if (FromFile != ToFile)
+		{
+			const FString CapturedSquare = FString::Printf(TEXT("%c%c"), 'a' + ToFile, '1' + FromRank);
+			if (AChessPiece* EPPawn = FindPieceOnSquare(CapturedSquare))
+			{
+				EPPawn->Destroy();
+				PieceActors.Remove(CapturedSquare);
+				bEnPassantCapture = true;
+			}
+		}
+	}
+
+	PlaySfx((bNormalCapture || bEnPassantCapture) ? CaptureSound : MoveSound);
 
 	if (MovingPiece && MovingPiece->PieceType == EChessPieceType::King)
 	{
@@ -565,7 +753,7 @@ void AChessManager::HandleMoveMade(FString From, FString To)
 				if (Rook)
 				{
 					PieceActors.Remove(RookFrom);
-					Board->SnapActorToSquare(Rook, 5, RankNum, 0.f);
+					Board->GlideActorToSquare(Rook, 5, RankNum, 0.f);
 					Rook->BoardFile = 5;
 					Rook->BoardRank = RankNum;
 					PieceActors.Add(RookTo, Rook);
@@ -579,7 +767,7 @@ void AChessManager::HandleMoveMade(FString From, FString To)
 				if (Rook)
 				{
 					PieceActors.Remove(RookFrom);
-					Board->SnapActorToSquare(Rook, 3, RankNum, 0.f);
+					Board->GlideActorToSquare(Rook, 3, RankNum, 0.f);
 					Rook->BoardFile = 3;
 					Rook->BoardRank = RankNum;
 					PieceActors.Add(RookTo, Rook);

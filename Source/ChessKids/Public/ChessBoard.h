@@ -39,10 +39,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Board", meta = (ClampMin = "10"))
 	float SquareSize = 100.f;
 
+	// THE way to color the board: squares render as tinted instances of
+	// M_SquareTint driven by these two colors. Edit them here or drag the
+	// in-game HUD sliders — same path. The material slots below are only a
+	// fallback for when the tint material is missing.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Board")
-	UMaterialInterface* LightSquareMaterial = nullptr;
+	FLinearColor LightSquareColor = FLinearColor(0.93f, 0.89f, 0.79f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Board")
+	FLinearColor DarkSquareColor = FLinearColor(0.09f, 0.10f, 0.16f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Board", AdvancedDisplay)
+	UMaterialInterface* LightSquareMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Board", AdvancedDisplay)
 	UMaterialInterface* DarkSquareMaterial = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Board")
@@ -174,6 +184,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Chess|Snap")
 	void SnapActorToSquare(AActor* ActorToSnap, int32 File, int32 Rank, float ZOffset = 0.f,bool bSnapRot = false, FRotator Rot = FRotator::ZeroRotator);
 
+	// Like SnapActorToSquare but chess pieces glide smoothly instead of teleporting.
+	// Non-piece actors (and spawns) still snap instantly.
+	UFUNCTION(BlueprintCallable, Category="Chess|Snap")
+	void GlideActorToSquare(AActor* ActorToMove, int32 File, int32 Rank, float ZOffset = 0.f);
+
+	// Free recoloring — used by the settings hue sliders. Tints the squares via
+	// dynamic instances of M_SquareTint; any color combination works, no themes needed.
+	UFUNCTION(BlueprintCallable, Category = "Chess|Themes")
+	void SetSquareColors(FLinearColor LightColor, FLinearColor DarkColor);
+
 	// Theme API — used by the in-game color slider.
 	// Swaps square materials in place; does not rebuild board geometry.
 	UFUNCTION(BlueprintCallable, Category = "Chess|Themes")
@@ -199,6 +219,8 @@ private:
 	UPROPERTY() UStaticMeshComponent* ScanPlaneMesh = nullptr;
 	UPROPERTY() TArray<UPointLightComponent*> EdgeLights;
 	UPROPERTY() TArray<UMaterialInstanceDynamic*> NeonDynMaterials;
+	UPROPERTY() UMaterialInstanceDynamic* LightTintDMI = nullptr;
+	UPROPERTY() UMaterialInstanceDynamic* DarkTintDMI = nullptr;
 
 	FString HoveredSquare;  
 
@@ -208,6 +230,7 @@ private:
 	void BuildBoard();
 	void BuildHolographicFrame();
 	void RebuildNeonDMIs();
+	void EnsureTintDMIs();
 	//void SnapModelToBoard();
 
 	UStaticMeshComponent* GetHighlightMesh(int32 File, int32 Rank) const;

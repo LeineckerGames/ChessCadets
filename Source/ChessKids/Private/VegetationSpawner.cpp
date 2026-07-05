@@ -50,7 +50,9 @@ void AVegetationSpawner::SpawnMeshes()
 		{
 			HISM = NewObject<UHierarchicalInstancedStaticMeshComponent>(this);
 			HISM->SetStaticMesh(LoadedMesh);
-			HISM->SetMobility(EComponentMobility::Static);
+			// Must match the root's mobility — a Static child can't attach to a
+			// Movable root (the "AttachTo ... Aborting" PIE errors).
+			HISM->SetMobility(Root->Mobility);
 			HISM->SetupAttachment(Root);
 			HISM->RegisterComponent();
 			SpawnedHISMs.Add(HISM);

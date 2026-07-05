@@ -52,6 +52,11 @@ class CHESSKIDS_API AChessPiece : public AActor
 
 public:
 	AChessPiece();
+	virtual void Tick(float DeltaTime) override;
+
+	// Smoothly moves the piece to a world location with a small hop (knights hop
+	// higher — they jump!). Replaces the instant teleport for in-game moves.
+	void StartGlide(const FVector& TargetLocation, float Duration = 0.3f);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Chess")
 	EChessPieceType PieceType = EChessPieceType::Pawn;
@@ -72,4 +77,11 @@ public:
 
 private:
 	void SetupMeshAndMaterial(const FPieceMeshConfig* MeshOverride);
+
+	// Glide state
+	FVector GlideStart = FVector::ZeroVector;
+	FVector GlideTarget = FVector::ZeroVector;
+	float GlideElapsed = 0.f;
+	float GlideDuration = 0.f;
+	bool bGliding = false;
 };

@@ -41,6 +41,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Pause")
 	TSoftClassPtr<UUserWidget> PauseMenuClass;
 
+	// In-game HUD (turn / check / game-over). Soft ref like the pause menu;
+	// falls back to the C++ UChessHudWidget when unset.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|UI")
+	TSoftClassPtr<UUserWidget> HudClass;
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Chess")
+	bool IsAIThinking() const { return bIsAIThinking; }
+
+	// Takes back the last move safely: cancels the queued AI reply and clears
+	// selection state before delegating to the manager. Bound to Z; also used
+	// by the pause menu's Undo button.
+	UFUNCTION(BlueprintCallable, Category = "Chess")
+	void UndoMove();
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Pause")
 	FName MainMenuMapName = TEXT("MainMenu");
 
@@ -60,6 +74,9 @@ private:
 
 	UPROPERTY()
 	UUserWidget* PauseMenuInstance = nullptr;
+
+	UPROPERTY()
+	UUserWidget* HudInstance = nullptr;
 
 	bool bPaused = false;
 
