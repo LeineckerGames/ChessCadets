@@ -8,6 +8,25 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/StaticMesh.h"
 
+// Contrast guarantee: whatever color reaches the board (sliders, details panel,
+// scripts), light squares are forced light and dark squares forced dark — the
+// value bands never overlap, so the checkerboard always reads.
+static FLinearColor ClampBoardColor(const FLinearColor& In, bool bLight)
+{
+	FLinearColor HSV = In.LinearRGBToHSV();   // R = hue, G = sat, B = value
+	if (bLight)
+	{
+		HSV.B = FMath::Max(HSV.B, 0.85f);
+		HSV.G = FMath::Min(HSV.G, 0.50f);
+	}
+	else
+	{
+		HSV.B = FMath::Min(HSV.B, 0.28f);
+		HSV.G = FMath::Max(HSV.G, 0.40f);
+	}
+	return HSV.HSVToLinearRGB();
+}
+
 AChessBoard::AChessBoard()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -48,6 +67,10 @@ void AChessBoard::BeginPlay()
 
 void AChessBoard::SetSquareColors(FLinearColor LightColor, FLinearColor DarkColor)
 {
+	// Contrast guarantee applies to every caller.
+	LightColor = ClampBoardColor(LightColor, true);
+	DarkColor  = ClampBoardColor(DarkColor, false);
+
 	LightSquareColor = LightColor;
 	DarkSquareColor  = DarkColor;
 
@@ -89,11 +112,14 @@ void AChessBoard::Tick(float DeltaTime)
 				DMI->SetScalarParameterValue(NeonPulseParamName, Val);
 	}
 
-	// holographic scan plane sweeps upward and loops back to the bottom
+	// holographic scan plane ping-pongs: sweeps up, then back down — no snap-reset
 	if (IsValid(ScanPlaneMesh) && ScanSpeed > 0.f)
 	{
-		ScanOffset = FMath::Fmod(ScanOffset + DeltaTime * ScanSpeed, ScanHeight);
-		ScanPlaneMesh->SetRelativeLocation(FVector(0.f, 0.f, GridOverlayZOffset + ScanOffset));
+		ScanOffset = FMath::Fmod(ScanOffset + DeltaTime * ScanSpeed, ScanHeight * 2.f);
+		const float PingPong = (ScanOffset <= ScanHeight)
+			? ScanOffset                          // rising leg
+			: (ScanHeight * 2.f - ScanOffset);    // falling leg
+		ScanPlaneMesh->SetRelativeLocation(FVector(0.f, 0.f, GridOverlayZOffset + PingPong));
 	}
 }
 
@@ -129,8 +155,8 @@ void AChessBoard::EnsureTintDMIs()
 	}
 	LightTintDMI = UMaterialInstanceDynamic::Create(Base, this);
 	DarkTintDMI  = UMaterialInstanceDynamic::Create(Base, this);
-	LightTintDMI->SetVectorParameterValue(TEXT("Color"), LightSquareColor);
-	DarkTintDMI->SetVectorParameterValue(TEXT("Color"), DarkSquareColor);
+	LightTintDMI->SetVectorParameterValue(TEXT("Color"), ClampBoardColor(LightSquareColor, true));
+	DarkTintDMI->SetVectorParameterValue(TEXT("Color"), ClampBoardColor(DarkSquareColor, false));
 }
 
 void AChessBoard::BuildBoard()

@@ -55,6 +55,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Chess")
 	void UndoMove();
 
+	// Asks the engine to suggest a move (bound to H).
+	UFUNCTION(BlueprintCallable, Category = "Chess")
+	void RequestHint();
+
+	// Receives the hint: selects the suggested piece THROUGH the normal selection
+	// flow (so state and highlights stay in sync) and marks the target square —
+	// clicking the target then plays the hinted move like any other move.
+	UFUNCTION()
+	void HandleHintReady(FString FromSquare, FString ToSquare);
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Pause")
 	FName MainMenuMapName = TEXT("MainMenu");
 
@@ -86,7 +96,11 @@ private:
 	void HandleHover();
 	void SelectPieceOnSquare(const FString& Square);
 
+	// Lifts the newly selected piece and drops the previous one (nullptr = drop only).
+	void SetSelectedPieceActor(AChessPiece* Piece);
+
 	//state
+	TWeakObjectPtr<AChessPiece> SelectedPieceActor;
 	FString SelectedSquare;
 	FString HoveredSquare;
 	bool bPieceSelected = false;

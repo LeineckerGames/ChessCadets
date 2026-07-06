@@ -131,6 +131,7 @@ void UPauseMenuWidget::NativeConstruct()
 
 	RefreshDifficultyLabel();
 	RefreshTwoPlayerButton();
+	ResetConfirms();   // reopening the menu resets any pending "Really ...?" question
 }
 
 FReply UPauseMenuWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
@@ -159,6 +160,15 @@ void UPauseMenuWidget::OnResumeClicked()
 
 void UPauseMenuWidget::OnRestartClicked()
 {
+	// Two-click confirm: first press asks, second press acts. Clicking anything
+	// else (or reopening the menu) resets the question.
+	if (!bConfirmRestart)
+	{
+		ResetConfirms();
+		bConfirmRestart = true;
+		SetButtonLabel(RestartButton, TEXT("Really restart?"));
+		return;
+	}
 	if (SettingsInstance && SettingsInstance->IsInViewport())
 		SettingsInstance->RemoveFromParent();
 	if (AChessPlayerController* PC = Cast<AChessPlayerController>(GetOwningPlayer()))
@@ -167,6 +177,7 @@ void UPauseMenuWidget::OnRestartClicked()
 
 void UPauseMenuWidget::OnSettingsClicked()
 {
+	ResetConfirms();
 	UClass* Cls = SettingsWidgetClass ? SettingsWidgetClass.Get() : USettingsMenuWidget::StaticClass();
 	if (!Cls) return;
 	if (!SettingsInstance)
@@ -177,14 +188,48 @@ void UPauseMenuWidget::OnSettingsClicked()
 
 void UPauseMenuWidget::OnQuitClicked()
 {
+	if (!bConfirmQuit)
+	{
+		ResetConfirms();
+		bConfirmQuit = true;
+		SetButtonLabel(QuitButton, TEXT("Really quit?"));
+		return;
+	}
 	if (SettingsInstance && SettingsInstance->IsInViewport())
 		SettingsInstance->RemoveFromParent();
 	if (AChessPlayerController* PC = Cast<AChessPlayerController>(GetOwningPlayer()))
 		PC->QuitToMainMenu();
 }
 
+void UPauseMenuWidget::ResetConfirms()
+{
+	if (bConfirmRestart) SetButtonLabel(RestartButton, TEXT("Restart"));
+	if (bConfirmQuit)    SetButtonLabel(QuitButton, TEXT("Quit to Menu"));
+	bConfirmRestart = false;
+	bConfirmQuit = false;
+}
+
+void UPauseMenuWidget::SetButtonLabel(UButton* Button, const FString& Label)
+{
+	if (!Button) return;
+	// Descend through wrapper panels (Overlay/Border/SizeBox in a styled WBP)
+	// until the label TextBlock is found — GetChildAt(0) alone breaks on them.
+	UWidget* W = Button->GetChildAt(0);
+	while (W)
+	{
+		if (UTextBlock* T = Cast<UTextBlock>(W))
+		{
+			T->SetText(FText::FromString(Label));
+			return;
+		}
+		UPanelWidget* Panel = Cast<UPanelWidget>(W);
+		W = (Panel && Panel->GetChildrenCount() > 0) ? Panel->GetChildAt(0) : nullptr;
+	}
+}
+
 void UPauseMenuWidget::OnUndoClicked()
 {
+	ResetConfirms();
 	AChessPlayerController* PC = Cast<AChessPlayerController>(GetOwningPlayer());
 	if (!PC || !PC->Manager) return;
 	// Resume first (UndoMove no-ops while paused), then take back via the controller
@@ -199,6 +244,7 @@ void UPauseMenuWidget::OnHardClicked()   { SetDifficulty(3); }
 
 void UPauseMenuWidget::SetDifficulty(int32 Level)
 {
+	ResetConfirms();
 	AChessPlayerController* PC = Cast<AChessPlayerController>(GetOwningPlayer());
 	if (PC && PC->Manager)
 		PC->Manager->SetDifficulty(Level);   // also persists to the GameInstance
@@ -231,6 +277,7 @@ void UPauseMenuWidget::RefreshDifficultyLabel()
 
 void UPauseMenuWidget::OnTwoPlayerClicked()
 {
+	ResetConfirms();
 	AChessPlayerController* PC = Cast<AChessPlayerController>(GetOwningPlayer());
 	if (!PC) return;
 
