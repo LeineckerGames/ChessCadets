@@ -13,6 +13,7 @@
 #include "Blueprint/WidgetTree.h"
 #include "Kismet/GameplayStatics.h"
 #include "Styling/CoreStyle.h"
+#include "TimerManager.h"
 
 TSharedRef<SWidget> UChessHudWidget::RebuildWidget()
 {
@@ -51,9 +52,40 @@ TSharedRef<SWidget> UChessHudWidget::RebuildWidget()
 			CS->SetAutoSize(true);
 		}
 
+		// Hint result — under the check line, cyan, hidden until requested.
+		HintResultText = WidgetTree->ConstructWidget<UTextBlock>();
+		HintResultText->SetJustification(ETextJustify::Center);
+		HintResultText->SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 18));
+		HintResultText->SetColorAndOpacity(FSlateColor(FLinearColor(0.3f, 0.9f, 1.f)));
+		HintResultText->SetVisibility(ESlateVisibility::Hidden);
+		if (UCanvasPanelSlot* HRS = Root->AddChildToCanvas(HintResultText))
+		{
+			HRS->SetAnchors(FAnchors(0.5f, 0.f, 0.5f, 0.f));
+			HRS->SetAlignment(FVector2D(0.5f, 0.f));
+			HRS->SetPosition(FVector2D(0.f, 96.f));
+			HRS->SetAutoSize(true);
+		}
+
+		// Captured-piece trays — top corners.
+		auto MakeTray = [&](UTextBlock*& OutText, float AnchorX, float AlignX, float PosX)
+		{
+			OutText = WidgetTree->ConstructWidget<UTextBlock>();
+			OutText->SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 14));
+			OutText->SetColorAndOpacity(FSlateColor(FLinearColor(1.f, 1.f, 1.f, 0.75f)));
+			if (UCanvasPanelSlot* TS2 = Root->AddChildToCanvas(OutText))
+			{
+				TS2->SetAnchors(FAnchors(AnchorX, 0.f, AnchorX, 0.f));
+				TS2->SetAlignment(FVector2D(AlignX, 0.f));
+				TS2->SetPosition(FVector2D(PosX, 24.f));
+				TS2->SetAutoSize(true);
+			}
+		};
+		MakeTray(WhiteCapturedText, 0.f, 0.f, 24.f);    // left: pieces YOU/P1 captured
+		MakeTray(BlackCapturedText, 1.f, 1.f, -24.f);   // right: pieces the robot/P2 captured
+
 		// Key hints — bottom left.
 		HintText = WidgetTree->ConstructWidget<UTextBlock>();
-		HintText->SetText(FText::FromString(TEXT("P — Pause    Z — Undo move")));
+		HintText->SetText(FText::FromString(TEXT("P — Pause    Z — Undo    H — Hint")));
 		HintText->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 12));
 		HintText->SetColorAndOpacity(FSlateColor(FLinearColor(1.f, 1.f, 1.f, 0.55f)));
 		if (UCanvasPanelSlot* HS = Root->AddChildToCanvas(HintText))
@@ -150,7 +182,10 @@ void UChessHudWidget::NativeConstruct()
 		Manager = Cast<AChessManager>(UGameplayStatics::GetActorOfClass(this, AChessManager::StaticClass()));
 
 	if (Manager)
+	{
 		Manager->OnGameOver.AddUniqueDynamic(this, &UChessHudWidget::HandleGameOver);
+		Manager->OnHintReady.AddUniqueDynamic(this, &UChessHudWidget::HandleHintReady);
+	}
 
 	if (WhiteColorSlider) WhiteColorSlider->OnValueChanged.AddUniqueDynamic(this, &UChessHudWidget::OnWhiteColorChanged);
 	if (BlackColorSlider) BlackColorSlider->OnValueChanged.AddUniqueDynamic(this, &UChessHudWidget::OnBlackColorChanged);
@@ -232,6 +267,26 @@ void UChessHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 		}
 	}
 
+	// Captured trays: the 64-square scan runs only when a move/undo actually
+	// happened (version bump), not every frame.
+	const int32 Version = Manager->GetPositionVersion();
+	if (Version != LastPositionVersion)
+	{
+		LastPositionVersion = Version;
+		const FString BlackLost = Manager->GetCapturedPieces(false);   // black pieces lost = captured by White/P1
+		const FString WhiteLost = Manager->GetCapturedPieces(true);    // white pieces lost = captured by Black/P2
+		if (WhiteCapturedText)
+		{
+			const FString Who = bTwoPlayer ? TEXT("P1 took") : TEXT("You took");
+			WhiteCapturedText->SetText(FText::FromString(BlackLost.IsEmpty() ? TEXT("") : FString::Printf(TEXT("%s:  %s"), *Who, *BlackLost)));
+		}
+		if (BlackCapturedText)
+		{
+			const FString Who = bTwoPlayer ? TEXT("P2 took") : TEXT("Robot took");
+			BlackCapturedText->SetText(FText::FromString(WhiteLost.IsEmpty() ? TEXT("") : FString::Printf(TEXT("%s:  %s"), *Who, *WhiteLost)));
+		}
+	}
+
 	if (CheckText)
 	{
 		const bool bInCheck = Manager->IsInCheck();
@@ -261,7 +316,28 @@ void UChessHudWidget::HandleGameOver(FString Result)
 	}
 	if (TurnText)  TurnText->SetVisibility(ESlateVisibility::Hidden);
 	if (CheckText) CheckText->SetVisibility(ESlateVisibility::Hidden);
+	if (HintResultText) HintResultText->SetVisibility(ESlateVisibility::Hidden);
 	if (GameOverPanel) GameOverPanel->SetVisibility(ESlateVisibility::Visible);
+}
+
+void UChessHudWidget::HandleHintReady(FString FromSquare, FString ToSquare)
+{
+	if (!HintResultText) return;
+	HintResultText->SetText(FText::FromString(
+		FString::Printf(TEXT("Hint: %s → %s"), *FromSquare.ToUpper(), *ToSquare.ToUpper())));
+	HintResultText->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+	// Fade the tip out after a few seconds.
+	if (UWorld* World = GetWorld())
+	{
+		TWeakObjectPtr<UChessHudWidget> WeakThis(this);
+		World->GetTimerManager().SetTimer(HintHideTimer, [WeakThis]()
+		{
+			if (UChessHudWidget* Self = WeakThis.Get())
+				if (Self->HintResultText)
+					Self->HintResultText->SetVisibility(ESlateVisibility::Hidden);
+		}, 5.f, false);
+	}
 }
 
 void UChessHudWidget::OnPlayAgainClicked()

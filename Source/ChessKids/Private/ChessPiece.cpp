@@ -22,6 +22,11 @@ AChessPiece::AChessPiece()
 
 void AChessPiece::StartGlide(const FVector& TargetLocation, float Duration)
 {
+	// Moving ends the selection hover; the glide starts from wherever the piece
+	// currently floats and lands on the destination square.
+	bSelectedHover = false;
+	HoverAlpha = 0.f;
+
 	GlideStart = GetActorLocation();
 	GlideTarget = TargetLocation;
 	GlideElapsed = 0.f;
@@ -30,9 +35,62 @@ void AChessPiece::StartGlide(const FVector& TargetLocation, float Duration)
 	SetActorTickEnabled(true);
 }
 
+void AChessPiece::SetSelected(bool bSelected)
+{
+	if (bSelectedHover == bSelected) return;
+	bSelectedHover = bSelected;
+
+	if (bSelected)
+	{
+		// Lift from where the piece rests (or where it's headed if mid-glide).
+		HoverBase = bGliding ? GlideTarget : GetActorLocation();
+		HoverTime = 0.f;
+		SetActorTickEnabled(true);
+	}
+	// Deselect: Tick eases HoverAlpha back down and restores HoverBase exactly.
+}
+
+void AChessPiece::StartCaptureFling()
+{
+	bGliding = false;   // a capture overrides any move in progress
+	bFlinging = true;
+	FlingElapsed = 0.f;
+	FlingStartScale = GetActorScale3D();
+	SetActorEnableCollision(false);   // don't block cursor traces on the way out
+	SetActorTickEnabled(true);
+}
+
 void AChessPiece::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	if (bFlinging)
+	{
+		FlingElapsed += DeltaTime;
+		const float Alpha = FMath::Clamp(FlingElapsed / 0.45f, 0.f, 1.f);
+		AddActorWorldOffset(FVector(0.f, 0.f, 320.f * DeltaTime));
+		SetActorScale3D(FlingStartScale * (1.f - FMath::InterpEaseIn(0.f, 1.f, Alpha, 2.f)));
+		if (Alpha >= 1.f)
+			Destroy();
+		return;
+	}
+
+	// Selection hover: quick lift, then a gentle bob until deselected.
+	// (Skipped while gliding — the glide owns the location until it lands.)
+	if (!bGliding && (bSelectedHover || HoverAlpha > 0.f))
+	{
+		HoverTime += DeltaTime;
+		const float Target = bSelectedHover ? 1.f : 0.f;
+		HoverAlpha = FMath::FInterpConstantTo(HoverAlpha, Target, DeltaTime, 1.f / 0.15f);
+
+		const float Bob = FMath::Sin(HoverTime * 2.f * PI * 1.4f) * 6.f;
+		SetActorLocation(HoverBase + FVector(0.f, 0.f, HoverAlpha * (24.f + Bob)));
+
+		if (!bSelectedHover && HoverAlpha <= 0.f)
+			SetActorLocation(HoverBase);   // land exactly where we lifted from
+		return;
+	}
+
 	if (!bGliding) { SetActorTickEnabled(false); return; }
 
 	GlideElapsed += DeltaTime;

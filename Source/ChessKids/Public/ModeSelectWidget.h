@@ -18,9 +18,10 @@ class CHESSKIDS_API UModeSelectWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	// Level to open after choosing (what CHESS MODE opened directly before).
+	// Level to open after choosing. Default: the minimal L_Grid board — pure chess
+	// for CHESS MODE (story mode has the arenas). Change back to L_Field if preferred.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Menu")
-	FName TargetLevel = TEXT("L_Field");
+	FName TargetLevel = TEXT("L_Grid");
 
 protected:
 	virtual void NativeConstruct() override;

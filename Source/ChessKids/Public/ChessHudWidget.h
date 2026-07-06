@@ -28,6 +28,9 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* TurnText;
 	UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* CheckText;
 	UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* HintText;
+	UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* HintResultText;   // "Hint: e2 → e4"
+	UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* WhiteCapturedText;
+	UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* BlackCapturedText;
 	UPROPERTY(meta = (BindWidgetOptional)) UVerticalBox* GameOverPanel;
 	UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* GameOverText;
 	UPROPERTY(meta = (BindWidgetOptional)) UButton* PlayAgainButton;
@@ -40,6 +43,7 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional)) USlider* BlackColorSlider;
 
 	UFUNCTION() void HandleGameOver(FString Result);
+	UFUNCTION() void HandleHintReady(FString FromSquare, FString ToSquare);
 	UFUNCTION() void OnPlayAgainClicked();
 	UFUNCTION() void OnMainMenuClicked();
 	UFUNCTION() void OnWhiteColorChanged(float Value);
@@ -54,4 +58,7 @@ private:
 
 	void ApplyBoardColors();
 	AChessPlayerController* GetChessPC() const;
+
+	FTimerHandle HintHideTimer;
+	int32 LastPositionVersion = -1;   // gates the captured-tray board scan to actual moves
 };

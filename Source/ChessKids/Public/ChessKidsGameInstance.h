@@ -63,15 +63,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Game", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float DarkSquareHue = 0.62f;
 
-	// Shared hue->color mapping so the board and the settings UI always agree:
-	// light squares stay pastel-bright, dark squares stay deep, whatever the hue.
+	// Shared hue->color mapping so the board and the settings UI always agree.
+	// The value bands are hard-separated (light >= 0.85, dark <= 0.28) so NO
+	// hue combination can ever produce a low-contrast board.
 	static FLinearColor LightColorFromHue(float Hue01)
 	{
-		return FLinearColor::MakeFromHSV8((uint8)(FMath::Clamp(Hue01, 0.f, 1.f) * 255.f), 90, 242);
+		return FLinearColor::MakeFromHSV8((uint8)(FMath::Clamp(Hue01, 0.f, 1.f) * 255.f), 85, 252);
 	}
 	static FLinearColor DarkColorFromHue(float Hue01)
 	{
-		return FLinearColor::MakeFromHSV8((uint8)(FMath::Clamp(Hue01, 0.f, 1.f) * 255.f), 178, 64);
+		return FLinearColor::MakeFromHSV8((uint8)(FMath::Clamp(Hue01, 0.f, 1.f) * 255.f), 205, 42);
 	}
 
 private:
