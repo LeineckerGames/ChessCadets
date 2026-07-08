@@ -3,6 +3,7 @@
 #include "ChessPiece.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
+#include "Kismet/GameplayStatics.h"
 #include "EngineUtils.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMeshActor.h"
@@ -46,10 +47,9 @@ void ATutorialManager::Tick(float DeltaTime)
 
 void ATutorialManager::ShowGuideMessage(const FString& Message)
 {
-	OnGuideMessage.Broadcast(Message);
+	OnGuideMessage.Broadcast(Message);   // rendered by UTutorialHudWidget
 
-	// Fallback on-screen text until the guide dialogue UI exists
-	if (GEngine)
+	if (false)   // debug fallback retired — the guide panel owns messaging now
 	{
 		GEngine->AddOnScreenDebugMessage(/*Key=*/1, /*TimeToDisplay=*/5.f,
 			FColor::Cyan, Message, /*bNewerOnTop=*/true, FVector2D(2.f, 2.f));
@@ -437,6 +437,18 @@ void ATutorialManager::OnPhaseComplete()
 		CurrentPhase = ETutorialPhase::Complete;
 		OnLevelComplete.Broadcast();
 		ShowGuideMessage(TEXT("Amazing! You've mastered this piece!"));
+
+		// Chain to the next lesson after the celebration has a moment on screen.
+		if (NextLevelName != NAME_None)
+		{
+			TWeakObjectPtr<ATutorialManager> WeakThis(this);
+			FTimerHandle TravelHandle;
+			GetWorldTimerManager().SetTimer(TravelHandle, [WeakThis]()
+			{
+				if (ATutorialManager* Self = WeakThis.Get())
+					UGameplayStatics::OpenLevel(Self, Self->NextLevelName);
+			}, 3.5f, false);
+		}
 	}
 	else
 	{

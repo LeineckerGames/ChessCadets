@@ -54,6 +54,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial")
 	EChessPieceType TaughtPiece = EChessPieceType::Pawn;
 
+	// Level to travel to a few seconds after this lesson completes
+	// (chains the tutorials: Pawn -> Rook -> ... -> King -> Axiom). None = stay.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial")
+	FName NextLevelName = NAME_None;
+
 	// Current state
 	UPROPERTY(BlueprintReadOnly, Category = "Tutorial")
 	ETutorialPhase CurrentPhase = ETutorialPhase::Phase1;
