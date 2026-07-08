@@ -8,20 +8,15 @@ class UButton;
 class UTextBlock;
 class UVerticalBox;
 
-// Shown when CHESS MODE is clicked on the main menu: a translucent overlay
-// (menu background stays visible) asking 1 Player vs CPU or 2 Players.
-// Picking 1P swaps to a difficulty page (Easy/Medium/Hard) before starting;
-// picking 2P starts immediately. Choices persist on the GameInstance.
+// CHESS MODE flow, three pages on one translucent overlay:
+//   1) mode:      1 PLAYER VS CPU / 2 PLAYERS
+//   2) difficulty (1P only): EASY / MEDIUM / HARD
+//   3) venue:     THE GRID (L_Grid) / THE FIELD (L_Field)  — both free play
+// Choices persist on the GameInstance; the venue click travels.
 UCLASS()
 class CHESSKIDS_API UModeSelectWidget : public UUserWidget
 {
 	GENERATED_BODY()
-
-public:
-	// Level to open after choosing. Default: the minimal L_Grid board — pure chess
-	// for CHESS MODE (story mode has the arenas). Change back to L_Field if preferred.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Menu")
-	FName TargetLevel = TEXT("L_Grid");
 
 protected:
 	virtual void NativeConstruct() override;
@@ -41,6 +36,12 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional)) UButton* HardButton;
 	UPROPERTY(meta = (BindWidgetOptional)) UButton* DifficultyBackButton;
 
+	// Page 3 — venue
+	UPROPERTY(meta = (BindWidgetOptional)) UVerticalBox* VenueBox;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* GridButton;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* FieldButton;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* VenueBackButton;
+
 	UFUNCTION() void OnOnePlayer();
 	UFUNCTION() void OnTwoPlayer();
 	UFUNCTION() void OnBack();
@@ -48,9 +49,17 @@ protected:
 	UFUNCTION() void OnMedium();
 	UFUNCTION() void OnHard();
 	UFUNCTION() void OnDifficultyBack();
+	UFUNCTION() void OnGrid();
+	UFUNCTION() void OnField();
+	UFUNCTION() void OnVenueBack();
 
 private:
-	void ShowDifficultyPage(bool bShow);
-	void StartOnePlayer(int32 Difficulty);
-	void StartGame(bool bTwoPlayer);
+	enum class EPage { Mode, Difficulty, Venue };
+	void ShowPage(EPage Page);
+	void PickDifficulty(int32 Difficulty);
+	void StartGame(FName Venue);
+
+	EPage CurrentPage = EPage::Mode;
+	bool bPendingTwoPlayer = false;
+	int32 PendingDifficulty = 1;
 };
