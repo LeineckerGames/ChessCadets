@@ -70,7 +70,13 @@ private:
 	UPROPERTY()
 	UUserWidget* SettingsInstance = nullptr;
 
+	// Two-click confirm state for destructive buttons (Restart / Quit).
+	bool bConfirmRestart = false;
+	bool bConfirmQuit = false;
+
 	void SetDifficulty(int32 Level);
 	void RefreshDifficultyLabel();
 	void RefreshTwoPlayerButton();
+	void ResetConfirms();
+	static void SetButtonLabel(UButton* Button, const FString& Label);
 };

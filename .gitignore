@@ -63,3 +63,4 @@ _local/
 # --- Large untracked asset packs (kept out of the repo; remove a line + force-add if any are real game content) ---
 /Content/GlitchNoises/
 /Content/Free_Cyber_Metal_Music_Pack/
+HANDOFF.md

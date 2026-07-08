@@ -36,6 +36,9 @@ void AChessPlayerController::BeginPlay()
 	if (!Manager)
 		Manager = Cast<AChessManager>(UGameplayStatics::GetActorOfClass(this, AChessManager::StaticClass()));
 
+	if (Manager)
+		Manager->OnHintReady.AddUniqueDynamic(this, &AChessPlayerController::HandleHintReady);
+
 	// HUD only where there is a game to narrate (menu maps have no manager).
 	if (Manager && !HudInstance)
 	{
@@ -77,6 +80,9 @@ void AChessPlayerController::SetupInputComponent()
 
 	// Z = take back the last move (lets a child recover from a mistake).
 	InputComponent->BindKey(EKeys::Z, IE_Pressed, this, &AChessPlayerController::UndoMove);
+
+	// H = hint (engine suggests a move and highlights it).
+	InputComponent->BindKey(EKeys::H, IE_Pressed, this, &AChessPlayerController::RequestHint);
 }
 
 void AChessPlayerController::HandleHover()
@@ -107,6 +113,16 @@ void AChessPlayerController::HandleHover()
 	Board->HoverSquare(Square);
 }
 
+void AChessPlayerController::SetSelectedPieceActor(AChessPiece* Piece)
+{
+	if (AChessPiece* Prev = SelectedPieceActor.Get())
+		if (Prev != Piece)
+			Prev->SetSelected(false);
+	SelectedPieceActor = Piece;
+	if (Piece)
+		Piece->SetSelected(true);
+}
+
 void AChessPlayerController::SelectPieceOnSquare(const FString& Square)
 {
 	TArray<FString> LegalMoves = Manager->GetLegalMovesFromSquare(Square);
@@ -116,6 +132,7 @@ void AChessPlayerController::SelectPieceOnSquare(const FString& Square)
 	bPieceSelected = true;
 	Board->SelectSquare(Square);
 	Board->ShowLegalMoveTargets(LegalMoves);
+	SetSelectedPieceActor(Manager->GetPieceActor(Square));   // lift it — "in hand"
 }
 
 void AChessPlayerController::OnDeselect()
@@ -124,6 +141,27 @@ void AChessPlayerController::OnDeselect()
 	bPieceSelected = false;
 	HoveredSquare.Empty();
 	Board->ClearHighlights();
+	SetSelectedPieceActor(nullptr);
+}
+
+void AChessPlayerController::RequestHint()
+{
+	if (bPaused || !Manager || bIsAIThinking) return;
+	if (Manager->IsGameOver()) return;
+	Manager->RequestHint();
+}
+
+void AChessPlayerController::HandleHintReady(FString FromSquare, FString ToSquare)
+{
+	if (bPaused || !Board || !Manager) return;
+
+	// Adopt the hint as the current selection via the normal flow: state and
+	// highlights stay consistent, and clicking the marked target simply plays
+	// the hinted move like any other.
+	bPieceSelected = false;
+	Board->ClearHighlights();
+	SelectPieceOnSquare(FromSquare);
+	Board->SelectSquare(ToSquare);   // make the suggested target stand out
 }
 
 void AChessPlayerController::UndoMove()
@@ -133,6 +171,7 @@ void AChessPlayerController::UndoMove()
 	// Cancel any queued/in-flight AI reply, clear selection, then take back the move.
 	GetWorldTimerManager().ClearTimer(AITimerHandle);
 	if (Board) Board->ClearHighlights();
+	SetSelectedPieceActor(nullptr);
 	bPieceSelected = false;
 	bIsAIThinking = false;
 	HoveredSquare.Empty();
@@ -176,6 +215,7 @@ void AChessPlayerController::OnSelect()
 		if (ClickedSquare == SelectedSquare)
 		{
 			bPieceSelected = false;
+			SetSelectedPieceActor(nullptr);
 			return;
 		}
 
@@ -187,6 +227,7 @@ void AChessPlayerController::OnSelect()
 
 		FString MoveStr = SelectedSquare + ClickedSquare;
 		bPieceSelected = false;
+		SetSelectedPieceActor(nullptr);   // the move (or its rejection) ends the "in hand" state
 
 		// Check promotion for both white and black
 		FString PromoPieceStr = Manager->GetPieceOnSquare(SelectedSquare);

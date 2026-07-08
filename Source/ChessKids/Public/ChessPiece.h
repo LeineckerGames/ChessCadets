@@ -58,6 +58,14 @@ public:
 	// higher — they jump!). Replaces the instant teleport for in-game moves.
 	void StartGlide(const FVector& TargetLocation, float Duration = 0.3f);
 
+	// Capture feedback: the piece pops upward and shrinks away, then destroys
+	// itself. Replaces the instant Destroy() blink-out.
+	void StartCaptureFling();
+
+	// Selection feedback: lifts the piece and bobs it gently until deselected,
+	// so which piece is "in hand" is unmistakable.
+	void SetSelected(bool bSelected);
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Chess")
 	EChessPieceType PieceType = EChessPieceType::Pawn;
 
@@ -84,4 +92,15 @@ private:
 	float GlideElapsed = 0.f;
 	float GlideDuration = 0.f;
 	bool bGliding = false;
+
+	// Capture-fling state
+	FVector FlingStartScale = FVector::OneVector;
+	float FlingElapsed = 0.f;
+	bool bFlinging = false;
+
+	// Selection-hover state
+	FVector HoverBase = FVector::ZeroVector;   // resting spot to lift from / return to
+	float HoverAlpha = 0.f;                    // 0 = grounded, 1 = fully lifted
+	float HoverTime = 0.f;
+	bool bSelectedHover = false;
 };
