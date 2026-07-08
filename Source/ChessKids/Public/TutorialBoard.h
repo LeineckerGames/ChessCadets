@@ -78,6 +78,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Tutorial|Board")
 	void ClearHighlights();
 
+	// Recolor a board square at runtime (e.g. darken unreachable squares, paint visited ones)
+	UFUNCTION(BlueprintCallable, Category = "Tutorial|Board")
+	void TintSquare(int32 File, int32 Rank, FLinearColor Color);
+
 	UFUNCTION(BlueprintCallable, Category = "Tutorial|Board")
 	void DisableSquare(int32 File, int32 Rank);
 

@@ -165,6 +165,20 @@ void ATutorialBoard::ShowLegalMoves(const TArray<FIntPoint>& Squares)
 		HighlightSquare(Sq.X, Sq.Y, LegalMoveMaterial);
 }
 
+void ATutorialBoard::TintSquare(int32 File, int32 Rank, FLinearColor Color)
+{
+	const int32 Idx = GridIndex(File, Rank);
+	if (Idx < 0 || !SquareMeshes.IsValidIndex(Idx)) return;
+
+	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr,
+		TEXT("/Game/Materials/BoardThemes/M_SquareTint.M_SquareTint"));
+	if (!Base) return;
+
+	UMaterialInstanceDynamic* DMI = UMaterialInstanceDynamic::Create(Base, this);
+	DMI->SetVectorParameterValue(TEXT("Color"), Color);
+	SquareMeshes[Idx]->SetMaterial(0, DMI);
+}
+
 void ATutorialBoard::DisableSquare(int32 File, int32 Rank)
 {
 	const int32 Idx = GridIndex(File, Rank);
