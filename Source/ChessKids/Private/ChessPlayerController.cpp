@@ -371,7 +371,7 @@ void AChessPlayerController::CompletePromotion(const FString& PieceLetter)
 	// Make the move with the correct promotion piece
 	FString MoveStr = PendingMoveStr + PieceLetter; // e.g. "e7e8n"
 	bool bSuccess = Manager->MakeMove(MoveStr);
-	UE_LOG(LogTemp, Warning, TEXT("Promotion MakeMove result: %s, Move: %s"),
+	UE_LOG(LogTemp, Verbose, TEXT("Promotion MakeMove result: %s, Move: %s"),
 		bSuccess ? TEXT("SUCCESS") : TEXT("FAILED"), *MoveStr);
 
 	if (bSuccess)
@@ -394,7 +394,6 @@ void AChessPlayerController::CompletePromotion(const FString& PieceLetter)
 
 void AChessPlayerController::ResetTurnState()
 {
-	UE_LOG(LogTemp, Warning, TEXT("ResetTurnState called!"));
 	bIsAIThinking = false;
 	bAwaitingPromotion = false;
 	bPieceSelected = false;

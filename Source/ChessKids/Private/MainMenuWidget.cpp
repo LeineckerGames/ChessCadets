@@ -2,6 +2,7 @@
 #include "ChessKidsGameInstance.h"
 #include "SettingsMenuWidget.h"
 #include "ModeSelectWidget.h"
+#include "TutorialSelectWidget.h"
 #include "Components/Button.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
@@ -73,7 +74,9 @@ void UMainMenuWidget::OnSettings()
 void UMainMenuWidget::OnLearn()
 {
 	SetTwoPlayerMode(false);
-	UGameplayStatics::OpenLevel(this, FirstTutorialLevel);
+	// Lesson picker overlay — jump into any lesson, stars mark completed ones.
+	if (UUserWidget* Picker = CreateWidget<UUserWidget>(GetOwningPlayer(), UTutorialSelectWidget::StaticClass()))
+		Picker->AddToViewport(50);
 }
 
 void UMainMenuWidget::InjectLearnButton()

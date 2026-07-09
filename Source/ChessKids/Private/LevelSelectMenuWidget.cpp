@@ -19,6 +19,15 @@ void ULevelSelectMenuWidget::NativeConstruct()
 	if (Btn_Level4) Btn_Level4->OnClicked.AddUniqueDynamic(this, &ULevelSelectMenuWidget::OnLevel4);
 	if (Btn_Level5) Btn_Level5->OnClicked.AddUniqueDynamic(this, &ULevelSelectMenuWidget::OnLevel5);
 
+	// Progression gate: chapter buttons enable as the player wins (or the dev
+	// unlock-all toggle). SetIsEnabled(true) also overrides any disabled state
+	// baked into the Widget Blueprint.
+	const UChessKidsGameInstance* GI = Cast<UChessKidsGameInstance>(GetGameInstance());
+	UButton* Chapters[5] = { Btn_Level1, Btn_Level2, Btn_Level3, Btn_Level4, Btn_Level5 };
+	for (int32 i = 0; i < 5; ++i)
+		if (Chapters[i])
+			Chapters[i]->SetIsEnabled(!GI || GI->IsStoryChapterUnlocked(i + 1));
+
 	// Story is five chapters; free play lives in CHESS MODE's venue picker.
 	if (Btn_Level6) Btn_Level6->SetVisibility(ESlateVisibility::Collapsed);
 }

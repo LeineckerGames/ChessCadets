@@ -4,6 +4,7 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "ChessKidsGameInstance.h"
 #include "EngineUtils.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMeshActor.h"
@@ -437,6 +438,24 @@ void ATutorialManager::OnPhaseComplete()
 		CurrentPhase = ETutorialPhase::Complete;
 		OnLevelComplete.Broadcast();
 		ShowGuideMessage(TEXT("Amazing! You've mastered this piece!"));
+
+		// Persist lesson completion (Pawn=0 Rook=1 Bishop=2 Knight=3 Queen=4 King=5).
+		if (UChessKidsGameInstance* GI = Cast<UChessKidsGameInstance>(GetGameInstance()))
+		{
+			int32 Lesson = -1;
+			switch (TaughtPiece)
+			{
+			case EChessPieceType::Pawn:   Lesson = 0; break;
+			case EChessPieceType::Rook:   Lesson = 1; break;
+			case EChessPieceType::Bishop: Lesson = 2; break;
+			case EChessPieceType::Knight: Lesson = 3; break;
+			case EChessPieceType::Queen:  Lesson = 4; break;
+			case EChessPieceType::King:   Lesson = 5; break;
+			default: break;
+			}
+			if (Lesson >= 0)
+				GI->MarkTutorialComplete(Lesson);
+		}
 
 		// Chain to the next lesson after the celebration has a moment on screen.
 		if (NextLevelName != NAME_None)

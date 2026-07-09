@@ -53,6 +53,29 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Game", meta = (ClampMin = "0"))
 	int32 BoardThemeIndex = 0;
 
+	// --- Progression (persisted via UChessKidsSaveGame, slot "ChessKidsProgress") ---
+
+	// Dev/testing override: everything unlocked. Session-only, toggled in Settings.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Dev")
+	bool bDevUnlockAll = false;
+
+	// Story chapter numbers are 1 = L_Pawn .. 5 = L_Royalty.
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Chess|Progress")
+	bool IsStoryChapterUnlocked(int32 Chapter) const;
+
+	// Called on a story victory; unlocks the next chapter and saves.
+	UFUNCTION(BlueprintCallable, Category = "Chess|Progress")
+	void NotifyStoryVictory(const FString& MapName);
+
+	UFUNCTION(BlueprintCallable, Category = "Chess|Progress")
+	void MarkTutorialComplete(int32 LessonIndex);
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Chess|Progress")
+	bool IsTutorialComplete(int32 LessonIndex) const;
+
+	// Chapter for a story map name (0 if not a story map).
+	static int32 StoryChapterForMap(const FString& MapName);
+
 	// Free board recoloring via the settings hue sliders (overrides themes when set).
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chess|Game")
 	bool bCustomBoardColors = false;
@@ -77,8 +100,13 @@ public:
 
 private:
 	UChessMapRegistry* LoadRegistry() const;
+	void LoadProgress();
+	void SaveProgress();
 
 	// Maps unlocked this session. Seeded from entries flagged bUnlockedByDefault.
 	UPROPERTY()
 	TSet<FName> UnlockedMaps;
+
+	UPROPERTY()
+	class UChessKidsSaveGame* Progress = nullptr;
 };

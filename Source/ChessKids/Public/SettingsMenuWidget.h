@@ -36,6 +36,7 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional)) USlider* WhiteColorSlider;
 	UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* BlackColorLabel;
 	UPROPERTY(meta = (BindWidgetOptional)) USlider* BlackColorSlider;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* DevUnlockButton;
 
 	UFUNCTION() void OnLow();
 	UFUNCTION() void OnMedium();
@@ -46,6 +47,7 @@ protected:
 	UFUNCTION() void OnBack();
 	UFUNCTION() void OnWhiteColorChanged(float Value);
 	UFUNCTION() void OnBlackColorChanged(float Value);
+	UFUNCTION() void OnToggleDevUnlock();
 
 private:
 	UPROPERTY() AChessBoard* CachedBoard = nullptr;

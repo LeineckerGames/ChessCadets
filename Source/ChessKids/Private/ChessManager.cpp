@@ -328,7 +328,7 @@ void AChessManager::RequestAIMove()
 	if (!Engine) return;
 	if (bTwoPlayerMode) return;   // hot-seat: no AI ever moves
 	bExpectingAIMove = true;   // arm OnBestMoveFound; Undo/NewGame clear this to drop a stale reply
-	UE_LOG(LogTemp, Warning, TEXT("AI thinking at depth %d"), AISearchDepth);
+	UE_LOG(LogTemp, Verbose, TEXT("AI thinking at depth %d"), AISearchDepth);
 	// At Easy difficulty, 50% chance of playing a random legal move
 	if (AISearchDepth == 1)
 	{
@@ -345,7 +345,7 @@ void AChessManager::RequestAIMove()
 			// 50% chance use random move, 50% use engine
 			if (FMath::RandBool())
 			{
-				UE_LOG(LogTemp, Warning, TEXT("Easy mode: playing random move!"));
+				UE_LOG(LogTemp, Verbose, TEXT("Easy mode: playing random move!"));
 				OnBestMoveFound(RandomMove);
 				return;
 			}
@@ -528,7 +528,7 @@ void AChessManager::SetDifficulty(int32 Level)
 	if (UChessKidsGameInstance* GI = Cast<UChessKidsGameInstance>(GetGameInstance()))
 		GI->Difficulty = CurrentDifficulty;
 
-	UE_LOG(LogTemp, Warning, TEXT("Difficulty set! AISearchDepth = %d"), AISearchDepth);
+	UE_LOG(LogTemp, Verbose, TEXT("Difficulty set! AISearchDepth = %d"), AISearchDepth);
 }
 
 FString AChessManager::GetFEN() const
@@ -669,6 +669,12 @@ void AChessManager::CheckGameOver()
 				? TEXT("black") : TEXT("white");
 			bGameOver = true;
 			PlaySfx(Winner == TEXT("white") ? WinSound : LoseSound);
+
+			// Story progression: beating the robot in a story arena unlocks the next chapter.
+			if (Winner == TEXT("white") && !bTwoPlayerMode)
+				if (UChessKidsGameInstance* GI = Cast<UChessKidsGameInstance>(GetGameInstance()))
+					GI->NotifyStoryVictory(GetWorld()->GetMapName());
+
 			OnGameOver.Broadcast(Winner);
 		}
 		else

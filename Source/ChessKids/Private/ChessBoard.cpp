@@ -475,10 +475,6 @@ void AChessBoard::HoverSquare(const FString& SquareStr)
 
     if (HoverMaterial) Hl->SetMaterial(0, HoverMaterial);
     Hl->SetVisibility(true);
-    
-    UE_LOG(LogTemp, Warning, TEXT("After set — Hl visible: %s | Mat: %s"),
-        Hl->IsVisible() ? TEXT("true") : TEXT("false"),
-        *GetNameSafe(Hl->GetMaterial(0)));
 
     HoveredSquare = SquareStr;
 }
